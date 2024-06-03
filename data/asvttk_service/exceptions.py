@@ -28,5 +28,13 @@ class TokenNotValidError(Exception):
     pass
 
 
+class RoleNotUniqueNameError(Exception):
+    pass
+
+
+class NotFoundError(Exception):
+    pass
+
+
 class NoArgsError(Exception):
     pass

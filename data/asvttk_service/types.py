@@ -48,16 +48,21 @@ class AccountData:
 
 
 @dataclasses.dataclass
-class StudentData:
+class TrainingData:
     id: int
-    type: AccountType
-    email: Optional[str]
-    about: Optional[str]
-    telegram_link: Optional[str]
+    name: str
+    start_text: str
+    html_start_text: str
+    photo_id: Optional[str]
     date_create: int
-    first_name: str
-    last_name: Optional[str]
-    patronymic: Optional[str]
-    creator_account_id: Optional[int]
-    training_id: Optional[int]
-    date_complete_training: Optional[int]
+    date_start: Optional[int]
+    date_end: Optional[int]
+
+
+@dataclasses.dataclass
+class RoleData:
+    id: int
+    name: str
+    date_create: int
+    trainings: Optional[list[TrainingData]]
+    accounts: Optional[list[AccountData]]

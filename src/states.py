@@ -5,3 +5,7 @@ class MainStates(StatesGroup):
     ADMIN = State()
     EMPLOYEE = State()
     STUDENT = State()
+
+
+class CreateRoleStates(StatesGroup):
+    NAME = State()

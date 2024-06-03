@@ -1,16 +1,19 @@
 from typing import Any, Optional, Type
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typeguard import typechecked
 
 from data.asvttk_service import types
 from data.asvttk_service.database import database
-from data.asvttk_service.exceptions import ObjectNotFoundError, KeyHasSessionError, TokenNotValidError, \
-    KeyNotFoundError, AccountNotFoundError, AccessError
-from data.asvttk_service.mappers import account_orm_to_account_data
-from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm
-from data.asvttk_service.types import AccountData
+from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
+    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError
+from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
+    training_orm_to_training_data
+from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
+    TrainingAndRoleOrm, RoleAndAccountOrm
+from data.asvttk_service.types import AccountData, RoleData
 from data.asvttk_service.utils import generate_session_token, generate_access_key
 
 
@@ -62,7 +65,7 @@ async def log_in(user_id: int, key: str) -> types.LogInData:
             except TokenNotValidError as _:
                 pass
         is_first = key_orm.is_first_log_in
-        token = generate_session_token(user_id)
+        token = generate_session_token()
         new_session_orm = SessionOrm(key_id=key_orm.id, token=token, user_id=user_id)
         s.add(new_session_orm)
         if is_first:
@@ -88,6 +91,62 @@ async def get_account_by_id(token: str, account_id: Optional[int] = None) -> Acc
         if token_data.account.type.value < account_orm.type.value:
             raise AccessError()
         return account_orm_to_account_data(account_orm)
+
+
+# Roles
+@typechecked
+async def create_role(token: str, name: str) -> RoleData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        if len(name) > 15:
+            raise ValueError()
+        new_role = RoleOrm(name=name)
+        try:
+            s.add(new_role)
+            await s.flush()
+            res = role_orm_to_role_data(new_role)
+            await s.commit()
+        except IntegrityError:
+            raise RoleNotUniqueNameError()
+        return res
+
+
+@typechecked
+async def get_all_roles(token: str) -> list[RoleData]:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError
+        query = await s.execute(select(RoleOrm))
+        roles = [role_orm_to_role_data(i) for i in query.scalars().all()]
+        return roles
+
+
+@typechecked
+async def get_role_by_id(token: str, role_id: int) -> RoleData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError
+        query = await s.execute(select(RoleOrm).filter(RoleOrm.id == role_id))
+        role_orm = query.scalars().first()
+        if not role_orm:
+            raise NotFoundError
+        query = await s.execute(select(TrainingOrm)
+                                .join(TrainingAndRoleOrm, TrainingOrm.id == TrainingAndRoleOrm.training_id)
+                                .join(RoleOrm, RoleOrm.id == TrainingAndRoleOrm.role_id)
+                                .filter(RoleOrm.id == role_id))
+        trainings = [training_orm_to_training_data(i) for i in query.scalars().all()]
+        query = await s.execute(select(AccountOrm)
+                                .join(RoleAndAccountOrm, RoleAndAccountOrm.account_id == AccountOrm.id)
+                                .join(RoleOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
+                                .filter(RoleOrm.id == role_id))
+        accounts = [account_orm_to_account_data(i) for i in query.scalars().all()]
+        role = role_orm_to_role_data(role_orm, trainings, accounts)
+        return role
+
 
 
 
