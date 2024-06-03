@@ -17,6 +17,15 @@ class AccountType(Enum):
 Base = declarative_base()
 
 
+class UserStateOrm(Base):
+    __tablename__ = "user_states"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(unique=True)
+    chat_id: Mapped[int]
+    state: Mapped[Optional[str]] = mapped_column(nullable=True)
+    data: Mapped[dict] = mapped_column(JSON)
+
+
 class KeyOrm(Base):
     __tablename__ = "keys"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -31,7 +40,7 @@ class SessionOrm(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     key_id: Mapped[int] = mapped_column(ForeignKey("keys.id", ondelete="CASCADE"))
     token: Mapped[str] = mapped_column(unique=True)
-    user_id: Mapped[int]
+    user_id: Mapped[int] = mapped_column(ForeignKey("user_states.user_id", ondelete="CASCADE"))
     date_create: Mapped[int] = mapped_column(default=get_current_time)
 
 

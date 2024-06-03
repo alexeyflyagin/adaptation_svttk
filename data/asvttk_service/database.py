@@ -1,6 +1,7 @@
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
+from config import settings
 from data.asvttk_service.models import AccountOrm, Base, KeyOrm, AccountType
 
 
@@ -31,9 +32,12 @@ class ASVTTKDatabase:
             admin_acc = AccountOrm(type=AccountType.ADMIN, first_name="ADMIN")
             service.add(admin_acc)
             await service.flush()
-            key = KeyOrm(access_key=self.admin_access_key, account_id=admin_acc.id, is_first_log_in=False)
+            key = KeyOrm(access_key=self.admin_access_key, account_id=admin_acc.id, is_first_log_in=True)
             service.add(key)
             await service.commit()
 
     async def disconnect(self):
         await self.engine.dispose()
+
+
+database = ASVTTKDatabase(url=settings.ASVTTK_DATABASE_URL, admin_access_key=settings.ADMIN_ACCESS_KEY)

@@ -1,12 +1,9 @@
-import random
 import time
 import uuid
-from enum import Enum
-from typing import Any, Optional
 
 
 def generate_access_key() -> str:
-    return str(uuid.uuid4()).replace("-", "")
+    return str(uuid.uuid4()).replace("-", "")[16:]
 
 
 def generate_session_token(user_id: int) -> str:
