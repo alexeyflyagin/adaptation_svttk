@@ -46,6 +46,14 @@ async def __validate_by_token(s: AsyncSession, token: str) -> ValidateByTokenDat
 
 
 @typechecked
+async def token_validate(token: Optional[str]):
+    if not token:
+        raise TokenNotValidError()
+    async with database.session_factory() as s:
+        await __validate_by_token(s, token)
+
+
+@typechecked
 async def log_out(token: str):
     async with database.session_factory() as s:
         token_session_orm = await __validate_by_token(s, token)
@@ -111,6 +119,39 @@ async def create_role(token: str, name: str) -> RoleData:
         except IntegrityError:
             raise RoleNotUniqueNameError()
         return res
+
+
+@typechecked
+async def delete_role(token: str, role_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(RoleOrm).filter(RoleOrm.id == role_id))
+        role_orm = query.scalars().first()
+        if not role_orm:
+            raise NotFoundError
+        await s.delete(role_orm)
+        await s.commit()
+
+
+@typechecked
+async def update_role(token: str, role_id: int, name: str):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(RoleOrm).filter(RoleOrm.id == role_id))
+        role_orm = query.scalars().first()
+        if not role_orm:
+            raise NotFoundError
+        if len(name) > 15:
+            raise ValueError()
+        role_orm.name = name
+        try:
+            await s.commit()
+        except IntegrityError:
+            raise RoleNotUniqueNameError()
 
 
 @typechecked

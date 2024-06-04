@@ -9,3 +9,7 @@ class MainStates(StatesGroup):
 
 class CreateRoleStates(StatesGroup):
     NAME = State()
+
+
+class RenameRoleStates(StatesGroup):
+    RENAME = State()

@@ -21,7 +21,7 @@ async def main():
     dispatcher.include_router(main_handlers.router)
     try:
         await bot.set_my_commands(config.BOT_COMMANDS)
-        await database.connect(drop_all="yes+")
+        await database.connect(drop_all="yes")
         await bot.delete_webhook(drop_pending_updates=True)
         print("bot started")
         await dispatcher.start_polling(bot)

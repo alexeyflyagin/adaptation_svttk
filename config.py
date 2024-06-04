@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
 
     class Config:
-        env_file = ".env"
+        env_file = "src/.env"
 
 
 settings = Settings()
