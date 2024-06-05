@@ -3,6 +3,14 @@ class AccessError(Exception):
     pass
 
 
+class EmailValueError(Exception):
+    pass
+
+
+class InitialsValueError(Exception):
+    pass
+
+
 class KeyIsBusyError(Exception):
     pass
 

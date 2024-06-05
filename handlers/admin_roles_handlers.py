@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from aiogram import Router, F
+from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
@@ -14,7 +15,7 @@ from data.asvttk_service.exceptions import RoleNotUniqueNameError, NotFoundError
 from data.asvttk_service.types import RoleData
 from handlers import handlers_utils
 from handlers.handlers_delete import show_delete, DeleteItemCD
-from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback
+from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, CreateRoleStates, RenameRoleStates
 from src.utils import get_full_name
@@ -44,7 +45,7 @@ def roles_keyboard(token: str, items: list[RoleData]):
     for item in items:
         kbb.add(InlineKeyboardButton(text=item.name, callback_data=RolesCD(token=token, role_id=item.id).pack()))
     kbb.adjust(2)
-    kbb.row(InlineKeyboardButton(text=strings.BTN_ADD, callback_data=RolesCD(token=token, is_create=True).pack()),
+    kbb.row(InlineKeyboardButton(text=strings.BTN_CREATE, callback_data=RolesCD(token=token, is_create=True).pack()),
             width=1)
     return kbb.as_markup()
 
@@ -115,6 +116,9 @@ async def delete_role_callback(callback: CallbackQuery):
         else:
             await show_role(data.token, data.deleted_item_id, callback.message)
             await callback.answer()
+    except NotFoundError:
+        await callback.answer(text=strings.ROLE__NOT_FOUND)
+        await show_roles(data.token, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
 
@@ -122,13 +126,16 @@ async def delete_role_callback(callback: CallbackQuery):
 @router.message(CreateRoleStates.NAME)
 async def create_role_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
+    if msg.content_type != ContentType.TEXT:
+        await msg.answer(strings.CREATE_ROLE__ERROR_FORMAT)
+        return
     try:
         role = await service.create_role(token, name=msg.text)
         await msg.answer(strings.CREATE_ROLE__SUCCESS.format(role_name=role.name))
         updated_msg_id: Optional[int] = (await state.get_data()).get("updated_msg_id", None)
         if updated_msg_id:
             await show_roles(token, msg, edited_msg_id=updated_msg_id, is_answer=False)
-        await handlers_utils.reset_state(state)
+        await reset_state(state)
     except ValueError:
         await msg.answer(strings.CREATE_ROLE__ENTER_NAME__TOO_LONGER_ERROR)
     except RoleNotUniqueNameError:
@@ -168,20 +175,20 @@ async def roles_handler(msg: Message, state: FSMContext):
         await token_not_valid_error(msg, state)
 
 
-async def show_roles(token: str, msg: Message = None, edited_msg_id: Optional[int] = None, is_answer: bool = True):
-    roles = await service.get_all_roles(token)
-    text = strings.ROLES if roles else strings.ROLES__EMPTY
-    keyboard = roles_keyboard(token, roles)
-    if not is_answer and edited_msg_id:
-        try:
+async def show_roles(token: str, msg: Message, edited_msg_id: Optional[int] = None, is_answer: bool = True):
+    try:
+        roles = await service.get_all_roles(token)
+        text = strings.ROLES if roles else strings.ROLES__EMPTY
+        keyboard = roles_keyboard(token, roles)
+        if not is_answer and edited_msg_id:
             await msg.bot.edit_message_text(text=text, chat_id=msg.chat.id, message_id=edited_msg_id,
                                             reply_markup=keyboard)
-        except TelegramBadRequest:
-            pass
-    elif not is_answer and not edited_msg_id:
-        await msg.edit_text(text=text, reply_markup=keyboard)
-    else:
-        await msg.answer(text=text, reply_markup=keyboard)
+        elif not is_answer and not edited_msg_id:
+            await msg.edit_text(text=text, reply_markup=keyboard)
+        else:
+            await msg.answer(text=text, reply_markup=keyboard)
+    except TelegramBadRequest:
+        pass
 
 
 async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id: Optional[int] = None,

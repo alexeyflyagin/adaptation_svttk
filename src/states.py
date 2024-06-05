@@ -7,6 +7,10 @@ class MainStates(StatesGroup):
     STUDENT = State()
 
 
+class CreateEmployeeStates(StatesGroup):
+    FULL_NAME = State()
+
+
 class CreateRoleStates(StatesGroup):
     NAME = State()
 

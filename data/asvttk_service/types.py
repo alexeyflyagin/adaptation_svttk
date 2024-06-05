@@ -66,3 +66,8 @@ class RoleData:
     date_create: int
     trainings: Optional[list[TrainingData]]
     accounts: Optional[list[AccountData]]
+
+
+@dataclasses.dataclass
+class EmployeeData(AccountData):
+    roles: list[RoleData]

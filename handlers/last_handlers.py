@@ -3,6 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import TokenNotValidError, AccessError
+from data.asvttk_service.models import AccountType
 
 from handlers.handlers_utils import get_token
 from src import strings
@@ -16,7 +17,7 @@ async def help_handler(msg: Message, state: FSMContext):
     try:
         await service.token_validate(token)
         account = await service.get_account_by_id(token)
-        if account.type.ADMIN:
+        if account.type == AccountType.ADMIN:
             await msg.answer(strings.HELP__ADMIN)
         else:
             await msg.answer("Хз, как это показать...")
