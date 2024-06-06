@@ -7,13 +7,17 @@ class MainStates(StatesGroup):
     STUDENT = State()
 
 
-class CreateEmployeeStates(StatesGroup):
+class EmployeeCreateStates(StatesGroup):
     FULL_NAME = State()
 
 
-class CreateRoleStates(StatesGroup):
+class EmployeeEditEmailStates(StatesGroup):
+    EditEmail = State()
+
+
+class RoleCreateStates(StatesGroup):
     NAME = State()
 
 
-class RenameRoleStates(StatesGroup):
+class RoleRenameStates(StatesGroup):
     RENAME = State()

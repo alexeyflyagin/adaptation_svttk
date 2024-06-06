@@ -1,4 +1,5 @@
 import random
+from typing import Any, Optional
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import Message, InlineKeyboardButton
@@ -12,13 +13,14 @@ class DeleteItemCD(CallbackData, prefix="delete"):
     tag: str
     is_delete: bool
     deleted_item_id: int
+    args: Optional[Any] = None
 
 
-def delete_keyboard(token: str, tag: str, deleted_item_id: int):
+def delete_keyboard(token: str, tag: str, deleted_item_id: int, args: Optional[Any] = None):
     kbb = InlineKeyboardBuilder()
     kbb.adjust(1)
-    btn_yes_data = DeleteItemCD(token=token, tag=tag, is_delete=True, deleted_item_id=deleted_item_id).pack()
-    btn_no_data = DeleteItemCD(token=token, tag=tag, is_delete=False, deleted_item_id=deleted_item_id).pack()
+    btn_yes_data = DeleteItemCD(token=token, tag=tag, is_delete=True, args=args, deleted_item_id=deleted_item_id).pack()
+    btn_no_data = DeleteItemCD(token=token, tag=tag, is_delete=False, args=args, deleted_item_id=deleted_item_id).pack()
     btn_yes = InlineKeyboardButton(text=strings.BTN_DELETE_YES, callback_data=btn_yes_data)
     btn_no = InlineKeyboardButton(text=strings.BTN_DELETE_NO, callback_data=btn_no_data)
     btn_no_1 = InlineKeyboardButton(text=strings.BTN_DELETE_NO_1, callback_data=btn_no_data)
@@ -31,8 +33,8 @@ def delete_keyboard(token: str, tag: str, deleted_item_id: int):
 
 
 async def show_delete(token: str, msg: Message, deleted_item_id: int, text: str, tag: str,
-                      is_answer: bool = True):
-    keyboard = delete_keyboard(token, tag, deleted_item_id=deleted_item_id)
+                      is_answer: bool = True, args: Optional[Any] = None):
+    keyboard = delete_keyboard(token, tag, deleted_item_id=deleted_item_id, args=args)
     if is_answer:
         await msg.answer(text, reply_markup=keyboard)
     else:

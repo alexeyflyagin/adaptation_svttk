@@ -3,7 +3,7 @@ from typing import Optional
 
 import sqlalchemy
 from sqlalchemy import JSON, ForeignKey, BigInteger
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 
 from data.asvttk_service.utils import get_current_time, generate_access_key, generate_session_token
 
@@ -57,6 +57,8 @@ class AccountOrm(Base):
         ForeignKey("trainings.id", ondelete="CASCADE", name="fk_training_id_in_account"), nullable=True)
     date_complete_training: Mapped[Optional[int]] = mapped_column(nullable=True)
 
+    roles = relationship("RoleOrm", secondary="role_and_accounts", back_populates="accounts")
+
 
 class RoleAndAccountOrm(Base):
     __tablename__ = "role_and_accounts"
@@ -71,6 +73,8 @@ class RoleOrm(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(unique=True)
     date_create: Mapped[int] = mapped_column(default=get_current_time)
+
+    accounts = relationship("AccountOrm", secondary="role_and_accounts", back_populates="roles")
 
 
 class TrainingAndRoleOrm(Base):

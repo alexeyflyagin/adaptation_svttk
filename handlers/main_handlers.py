@@ -8,8 +8,8 @@ from src import strings, commands
 from custom_storage import TOKEN
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError
-from src.states import CreateRoleStates, RenameRoleStates, CreateEmployeeStates
-from src.utils import key_link
+from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates
+from src.utils import key_link, get_full_name_by_account
 
 router = Router()
 router.include_routers(admin_roles_handlers.router)
@@ -25,20 +25,22 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
     user_id = msg.from_user.id
     try:
         log_in_data = await service.log_in(user_id, key=command.args)
+        account = await service.get_account_by_id(log_in_data.token)
         await state.update_data({TOKEN: log_in_data.token})
         await handlers_utils.reset_state(state)
         if log_in_data.is_first:
-            await msg.answer(strings.LOG_IN__SUCCESS__FIRST.format(key=log_in_data.access_key,
-                                                                   key_link=key_link(log_in_data.access_key)))
+            await msg.answer(strings.LOG_IN__SUCCESS__FIRST.format(first_name=account.first_name,
+                                                                   access_key=log_in_data.access_key))
         else:
-            await msg.answer(strings.LOG_IN__SUCCESS)
+            await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
     except KeyNotFoundError:
         await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
 
 
-@router.message(CreateRoleStates(), Command(commands.CANCEL))
-@router.message(RenameRoleStates(), Command(commands.CANCEL))
-@router.message(CreateEmployeeStates(), Command(commands.CANCEL))
+@router.message(RoleCreateStates(), Command(commands.CANCEL))
+@router.message(RoleRenameStates(), Command(commands.CANCEL))
+@router.message(EmployeeEditEmailStates(), Command(commands.CANCEL))
+@router.message(EmployeeCreateStates(), Command(commands.CANCEL))
 async def cancel_handler(msg: Message, state: FSMContext):
     await handlers_utils.reset_state(state)
     await msg.answer(strings.ACTION_CANCELED)

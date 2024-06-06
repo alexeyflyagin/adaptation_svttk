@@ -17,7 +17,7 @@ from handlers import handlers_utils
 from handlers.handlers_delete import show_delete, DeleteItemCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
-from src.states import MainStates, CreateRoleStates, RenameRoleStates
+from src.states import MainStates, RoleCreateStates, RoleRenameStates
 from src.utils import get_full_name
 
 router = Router()
@@ -69,7 +69,7 @@ async def roles_callback(callback: CallbackQuery, state: FSMContext):
     try:
         if data.is_create:
             await service.token_validate(data.token)
-            await state.set_state(CreateRoleStates.NAME)
+            await state.set_state(RoleCreateStates.NAME)
             await state.update_data({"updated_msg_id": callback.message.message_id})
             await callback.message.answer(strings.CREATE_ROLE__ENTER_NAME)
         else:
@@ -95,10 +95,13 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
             await state.update_data({"updated_msg_id": None})
         if data.action == data.Action.RENAME:
             role = await service.get_role_by_id(data.token, data.role_id)
-            await state.set_state(RenameRoleStates.RENAME)
+            await state.set_state(RoleRenameStates.RENAME)
             await state.update_data({"updated_item_id": role.id})
             await state.update_data({"updated_msg_id": callback.message.message_id})
             await callback.message.answer(strings.ROLE__RENAME.format(role_name=role.name))
+        await callback.answer()
+    except NotFoundError:
+        await show_role(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
@@ -123,7 +126,7 @@ async def delete_role_callback(callback: CallbackQuery):
         await token_not_valid_error_for_callback(callback)
 
 
-@router.message(CreateRoleStates.NAME)
+@router.message(RoleCreateStates.NAME)
 async def create_role_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     if msg.content_type != ContentType.TEXT:
@@ -144,7 +147,7 @@ async def create_role_name_handler(msg: Message, state: FSMContext):
         await token_not_valid_error(msg, state)
 
 
-@router.message(RenameRoleStates.RENAME)
+@router.message(RoleRenameStates.RENAME)
 async def rename_role_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
@@ -154,7 +157,7 @@ async def rename_role_name_handler(msg: Message, state: FSMContext):
         updated_msg_id: Optional[int] = (await state.get_data()).get("updated_msg_id", None)
         if updated_msg_id:
             await show_role(token, role_id, msg, edited_msg_id=updated_msg_id, is_answer=False)
-        await handlers_utils.reset_state(state)
+        await reset_state(state)
     except ValueError:
         await msg.answer(strings.CREATE_ROLE__ENTER_NAME__TOO_LONGER_ERROR)
     except RoleNotUniqueNameError:
@@ -163,7 +166,7 @@ async def rename_role_name_handler(msg: Message, state: FSMContext):
         await token_not_valid_error(msg, state)
     except NotFoundError:
         await msg.answer(strings.ROLE__NOT_FOUND)
-        await handlers_utils.reset_state(state)
+        await reset_state(state)
 
 
 @router.message(MainStates.ADMIN, Command(commands.ROLES))

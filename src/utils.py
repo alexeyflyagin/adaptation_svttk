@@ -16,12 +16,15 @@ def get_full_name(first_name: str, last_name: Optional[str], patronymic: Optiona
     return s
 
 
-def get_full_name_by_account(account: AccountData):
+def get_full_name_by_account(account: AccountData, full_patronymic: bool = False):
     s = f"{account.first_name}"
     if account.last_name:
-        s += f" {account.last_name}"
+        s = f"{account.last_name} {s}"
     if account.patronymic:
-        s += f" {account.patronymic[0]}"
+        if full_patronymic:
+            s += f" {account.patronymic}"
+        else:
+            s += f" {account.patronymic[0]}"
     return s
 
 

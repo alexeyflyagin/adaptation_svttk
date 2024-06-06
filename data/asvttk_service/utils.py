@@ -10,7 +10,7 @@ def generate_access_key() -> str:
 
 
 def generate_session_token() -> str:
-    return f'{str(uuid.uuid4()).replace("-", "")}'
+    return str(uuid.uuid4()).replace("-", "")[4:]
 
 
 def get_current_time() -> int:
@@ -23,7 +23,7 @@ def email_check(email: Optional[str]):
 
 
 def initials_check(first_name: str, last_name: Optional[str], patronymic: Optional[str]):
-    if first_name.replace(" ", "") == "":
+    if first_name and first_name.replace(" ", "") == "":
         raise InitialsValueError("first_name is empty")
     if last_name and last_name.replace(" ", "") == "":
         raise InitialsValueError("last_name is empty")

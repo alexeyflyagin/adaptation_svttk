@@ -9,8 +9,11 @@ BTN_DELETE_NO = "Нет"
 BTN_DELETE_NO_1 = "Отменить!"
 BTN_DELETE_BACK = "« Назад"
 BTN_DELETE = "Удалить"
+BTN_EDIT_EMAIL = "Изм. email"
 BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
+BTN_PIN = "Закрепить"
+BTN_LOG_IN = "Войти"
 
 
 # DateFormats
@@ -24,11 +27,25 @@ ACTION_CANCELED = f"""Действие отменено."""
 
 
 # LogIn
-LOG_IN__SUCCESS = """Вы успешно вошли в аккаунт."""
+LOG_IN__SUCCESS = f"""Вы успешно вошли в аккаунт! Добрый день, <code>{{first_name}}</code>. 
+
+/{commands.HELP.command} - {commands.HELP.description}"""
 
 LOG_IN__SUCCESS__FIRST = f"""{LOG_IN__SUCCESS}
-Вы зашли в аккаунт впервые. В целях безопасности был присвоен новый ключ: <code>{{key}}</code>.
-Новая ссылка для входа в аккаунт: {{key_link}}"""
+
+Вы зашли в аккаунт впервые. В целях безопасности был присвоен новый ключ доступа.
+Ключ доступа:  <tg-spoiler>{{access_key}}</tg-spoiler>
+<i>(Храните ключ доступа в безопасном месте!)</i>
+
+Нажмите '<code>{BTN_PIN}</code>', чтобы закрепить это сообщение в этом чате для последующего входа в будущем."""
+
+
+LOG_IN__DATA__PINED = f"""Ваши данные для входа, <code>{{first_name}}</code>.
+Ключ доступа:  <tg-spoiler>{{access_key}}</tg-spoiler>
+<i>(Храните ключ доступа в безопасном месте!)</i>
+
+Нажмите '<code>{BTN_LOG_IN}</code>' чтобы войти в этот аккаунт."""
+
 
 LOG_IN__ACCOUNT_NOT_FOUND = """
 <b>Ошибка!</b> Аккаунт не найден.
@@ -104,6 +121,8 @@ EMPLOYEES_ITEM = """<b>{index}</b>  <b>{full_name}</b>
 
 EMPLOYEES_ITEM__ROLES_EMPTY = """<i>(Нет ролей)</i>"""
 
+EMPTY_FIELD = """-"""
+
 EMPLOYEES = """
 {items}
 —
@@ -127,6 +146,38 @@ CREATE_EMPLOYEE__SUCCESS = f"""Аккаунт для нового сотрудн
 Ссылка для авторизации: {{access_link}}
 <i>(Для безопасности ключ доступа сменится при первом входе в аккаунт)</i>
 Вы можете пригласить сотрудника, нажав '{BTN_INVITE}'."""
+
+
+EMPLOYEE = """Сотрудник
+Добавлен:  <code>{date_create}</code>
+Фамилия:  <code>{last_name}</code>
+Имя:  <code>{first_name}</code>
+Отчество:  <code>{patronymic}</code>
+Email: {email}
+Роли:  {roles_list}"""
+
+EMPLOYEE__NOT_FOUND = """Ошибка! Сотрудник не найден."""
+
+EMPLOYEE__DELETED = """Сотрудник успешно {full_name} удален."""
+
+EMPLOYEE_DELETE = f"""После подтверждения действия, сотрудник будет навсегда удалена!
+—
+Вы действительно хотите удалить сотрудника
+'<code>{{full_name}}</code>'?"""
+
+
+EMPLOYEE__EDIT_EMAIL = f"""Введите <b>email</b>.
+Пример: <code>ivanov_ivan66@email.ru</code>
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+EMPLOYEE__EDIT_EMAIL__SUCCESS = f"""Email сотрудника  <code>{{full_name}}</code>  успешно изменен!"""
+
+EMPLOYEE__EDIT_EMAIL__EMAIL_ERROR = f"""<b>Ошибка!</b> Email должен содержать '<code>@</code>'.
+Пример: <code>ivanov_ivan66@email.ru</code>
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
 
 
 

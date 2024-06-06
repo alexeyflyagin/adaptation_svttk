@@ -1,8 +1,9 @@
 from typing import Any, Optional, Type
 
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from typeguard import typechecked
 
 from data.asvttk_service import types
@@ -107,10 +108,31 @@ async def get_all_employees(token: str) -> list[EmployeeData]:
         token_data = await __validate_by_token(s, token)
         if token_data.account.type != AccountType.ADMIN:
             raise AccessError
-        query = await s.execute(select(AccountOrm).filter(AccountOrm.type == AccountType.EMPLOYEE))
-        employees = query.scalars().all()
-        employees_data = [account_orm_to_employee_data(i, []) for i in employees]
+        query = await s.execute(
+            select(AccountOrm).options(joinedload(AccountOrm.roles))
+            .filter(AccountOrm.type == AccountType.EMPLOYEE)
+            .order_by(AccountOrm.date_create)
+        )
+        employees = query.unique().scalars().all()
+        employees_data = [
+            account_orm_to_employee_data(i, [role_orm_to_role_data(r) for r in i.roles]) for i in employees]
         return employees_data
+
+
+@typechecked
+async def get_employee_by_id(token: str, employee_id: int) -> EmployeeData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError
+        query = await s.execute(
+            select(AccountOrm).options(joinedload(AccountOrm.roles))
+            .filter(AccountOrm.type == AccountType.EMPLOYEE, AccountOrm.id == employee_id)
+        )
+        employee = query.scalars().first()
+        if not employee:
+            raise NotFoundError()
+        return account_orm_to_employee_data(employee, [role_orm_to_role_data(r) for r in employee.roles])
 
 
 @typechecked
@@ -139,6 +161,45 @@ async def create_employee(token: str, first_name: str, last_name: Optional[str] 
         res = await __create_account(s, AccountType.EMPLOYEE, first_name, last_name, patronymic, email)
         await s.commit()
         return res
+
+
+@typechecked
+async def delete_employee(token: str, employee_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(AccountOrm).filter(AccountOrm.id == employee_id))
+        account_orm = query.scalars().first()
+        if not account_orm:
+            raise NotFoundError
+        await s.delete(account_orm)
+        await s.commit()
+
+
+@typechecked
+async def update_employee(token: str, employee_id: int, first_name: Optional[str] = None,
+                          last_name: Optional[str] = None, patronymic: Optional[str] = None,
+                          email: Optional[str] = None):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(AccountOrm).filter(AccountOrm.id == employee_id))
+        account_orm = query.scalars().first()
+        if not account_orm:
+            raise NotFoundError
+        email_check(email)
+        initials_check(first_name, last_name, patronymic)
+        if first_name:
+            account_orm.first_name = first_name
+        if last_name:
+            account_orm.last_name = last_name
+        if patronymic:
+            account_orm.patronymic = patronymic
+        if email:
+            account_orm.email = email
+        await s.commit()
 
 
 # Roles

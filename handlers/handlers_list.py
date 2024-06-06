@@ -13,6 +13,7 @@ from src import strings
 class ListCD(CallbackData, prefix="list"):
     token: str
     tag: str
+    page_index: int
     action: str
     selected_item_id: Optional[int] = None
 
@@ -36,11 +37,11 @@ def __list_keyboard(token: str, tag: str, page_index: int, page_count: int, page
     kbb = InlineKeyboardBuilder()
     adjust = []
     if has_pages:
-        btn_previous_data = ListCD(token=token, page_index=page_index, page_count=page_count, tag=tag,
+        btn_previous_data = ListCD(token=token, page_index=page_index, tag=tag,
                                    action=ListCD.Action.PREVIOUS_PAGE)
-        btn_counter_data = ListCD(token=token, page_index=page_index, page_count=page_count, tag=tag,
+        btn_counter_data = ListCD(token=token, page_index=page_index, tag=tag,
                                   action=ListCD.Action.COUNTER)
-        btn_next_data = ListCD(token=token, page_index=page_index, page_count=page_count, tag=tag,
+        btn_next_data = ListCD(token=token, page_index=page_index, tag=tag,
                                action=ListCD.Action.NEXT_PAGE)
         btn_previous = InlineKeyboardButton(text="«", callback_data=btn_previous_data.pack())
         btn_counter = InlineKeyboardButton(text=f"{page_index + 1} / {page_count}",
@@ -49,14 +50,14 @@ def __list_keyboard(token: str, tag: str, page_index: int, page_count: int, page
         kbb.row(btn_previous, btn_counter, btn_next, width=3)
         adjust.append(3)
     for item in page_items:
-        btn_select_item_data = ListCD(token=token, page_index=page_index, page_count=page_count, tag=tag,
+        btn_select_item_data = ListCD(token=token, page_index=page_index, tag=tag,
                                       action=ListCD.Action.SELECT,
                                       selected_item_id=item.item_id)
         kbb.add(InlineKeyboardButton(text=item.name, callback_data=btn_select_item_data.pack()))
     if page_items:
         adjust.append(len(page_items))
     if add_btn_text:
-        btn_add_data = ListCD(token=token, page_index=page_index, page_count=page_count, tag=tag,
+        btn_add_data = ListCD(token=token, page_index=page_index, tag=tag,
                               action=ListCD.Action.ADD)
         kbb.row(InlineKeyboardButton(text=add_btn_text, callback_data=btn_add_data.pack()), width=1)
         adjust.append(1)
