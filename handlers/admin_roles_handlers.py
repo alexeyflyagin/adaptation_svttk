@@ -7,18 +7,17 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, SwitchInlineQueryChosenChat
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import RoleNotUniqueNameError, NotFoundError, TokenNotValidError
 from data.asvttk_service.types import RoleData
-from handlers import handlers_utils
 from handlers.handlers_delete import show_delete, DeleteItemCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, RoleCreateStates, RoleRenameStates
-from src.utils import get_full_name
+from src.utils import get_full_name, get_access_key_link
 
 router = Router()
 
