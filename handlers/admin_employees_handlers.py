@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, SwitchInlineQueryChosenChat
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service.exceptions import TokenNotValidError, InitialsValueError, NotFoundError, EmailValueError
@@ -18,7 +18,7 @@ from handlers.handlers_list import list_keyboard, get_pages, ListItem, get_items
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, EmployeeCreateStates, EmployeeEditEmailStates
-from src.utils import get_full_name_by_account, key_link
+from src.utils import get_full_name_by_account, get_access_key_link
 
 router = Router()
 
@@ -50,6 +50,14 @@ def employee_keyboard(token: str, page_index: int, employee_id: Optional[int] = 
     btn_back_data = EmployeeCD(token=token, page_index=page_index, action=EmployeeCD.Action.BACK)
     kbb.row(InlineKeyboardButton(text=strings.BTN_BACK, callback_data=btn_back_data.pack()), width=1)
     kbb.adjust(2, 1)
+    return kbb.as_markup()
+
+
+def invite_keyboard(first_name: str, access_key: str):
+    kbb = InlineKeyboardBuilder()
+    text = strings.EMPLOYEE_INVITE.format(first_name=first_name, invite_link=get_access_key_link(access_key))
+    query = SwitchInlineQueryChosenChat(query=text, allow_user_chats=True)
+    kbb.row(InlineKeyboardButton(text=strings.BTN_INVITE, switch_inline_query_chosen_chat=query), width=1)
     return kbb.as_markup()
 
 
@@ -99,8 +107,12 @@ async def create_employee_handler(msg: Message, state: FSMContext):
         initials = [None if i == "-" else i for i in msg.text.split()]
         acc_data = await service.create_employee(token, first_name=initials[1], last_name=initials[0],
                                                  patronymic=initials[2])
-        await msg.answer(strings.CREATE_EMPLOYEE__SUCCESS.format(access_key=acc_data.access_key,
-                                                                 access_link=key_link(acc_data.access_key)))
+        account = await service.get_employee_by_id(token, acc_data.account_id)
+        keyboard = invite_keyboard(account.first_name, acc_data.access_key)
+        await msg.answer(strings.CREATE_EMPLOYEE__SUCCESS.format(
+            full_name=get_full_name_by_account(account, full_patronymic=True),
+            access_key=acc_data.access_key,
+            access_link=get_access_key_link(acc_data.access_key)), reply_markup=keyboard)
         updated_msg: Optional[list] = (await state.get_data()).get("updated_msg", None)
         if updated_msg:
             await show_employees(token, msg, edited_msg_id=updated_msg[0], page_index=updated_msg[1], is_answer=False)

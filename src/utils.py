@@ -3,8 +3,8 @@ from typing import Optional
 from data.asvttk_service.types import AccountData
 
 
-def key_link(key: str):
-    return f"https://t.me/superusername_bot?start={key}"
+def get_access_key_link(access_key: str):
+    return f"https://t.me/superusername_bot?start={access_key}"
 
 
 def get_full_name(first_name: str, last_name: Optional[str], patronymic: Optional[str]):
