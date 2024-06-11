@@ -58,6 +58,7 @@ class AccountOrm(Base):
     date_complete_training: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     roles = relationship("RoleOrm", secondary="role_and_accounts", back_populates="accounts")
+    training = relationship("TrainingOrm", back_populates="students")
 
 
 class RoleAndAccountOrm(Base):
@@ -75,26 +76,33 @@ class RoleOrm(Base):
     date_create: Mapped[int] = mapped_column(default=get_current_time)
 
     accounts = relationship("AccountOrm", secondary="role_and_accounts", back_populates="roles")
+    trainings = relationship("TrainingOrm", secondary="training_and_roles", back_populates="roles")
 
 
 class TrainingAndRoleOrm(Base):
     __tablename__ = "training_and_roles"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"))
-    date_create: Mapped[int] = mapped_column(default=get_current_time)
     training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id", ondelete="CASCADE"))
+    date_create: Mapped[int] = mapped_column(default=get_current_time)
 
 
 class TrainingOrm(Base):
     __tablename__ = "trainings"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
-    start_text: Mapped[str]
-    html_start_text: Mapped[str]
+    start_text: Mapped[str] = mapped_column(default="")
+    html_start_text: Mapped[str] = mapped_column(default="")
     photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     date_start: Mapped[Optional[int]] = mapped_column(nullable=True)
     date_end: Mapped[Optional[int]] = mapped_column(nullable=True)
+
+    students = relationship("AccountOrm", back_populates="training")
+    roles = relationship(
+        "RoleOrm", secondary="training_and_roles", secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
+        primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings"
+    )
 
 
 class LevelOrm(Base):

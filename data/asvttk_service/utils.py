@@ -2,7 +2,7 @@ import time
 import uuid
 from typing import Optional
 
-from data.asvttk_service.exceptions import EmailValueError, InitialsValueError
+from data.asvttk_service.exceptions import EmailValueError, InitialsValueError, EmptyFieldError
 
 
 def generate_access_key() -> str:
@@ -10,7 +10,7 @@ def generate_access_key() -> str:
 
 
 def generate_session_token() -> str:
-    return str(uuid.uuid4()).replace("-", "")[4:]
+    return str(uuid.uuid4()).replace("-", "")[16:]
 
 
 def get_current_time() -> int:
@@ -20,6 +20,11 @@ def get_current_time() -> int:
 def email_check(email: Optional[str]):
     if email and "@" not in email:
         raise EmailValueError()
+
+
+def empty_check(it: Optional[str]):
+    if it and it.replace(" ", "") == "":
+        raise EmptyFieldError("first_name is empty")
 
 
 def initials_check(first_name: str, last_name: Optional[str], patronymic: Optional[str]):

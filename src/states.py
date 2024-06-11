@@ -21,3 +21,8 @@ class RoleCreateStates(StatesGroup):
 
 class RoleRenameStates(StatesGroup):
     RENAME = State()
+
+
+class TrainingCreateStates(StatesGroup):
+    NAME = State()
+    ROLE = State()

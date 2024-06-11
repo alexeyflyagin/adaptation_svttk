@@ -1,5 +1,3 @@
-from typing import Any, Optional
-
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 

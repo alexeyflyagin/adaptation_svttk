@@ -1,7 +1,7 @@
 from typing import Optional
 
 from data.asvttk_service.models import AccountOrm, RoleOrm, TrainingOrm
-from data.asvttk_service.types import AccountData, RoleData, TrainingData, EmployeeData
+from data.asvttk_service.types import AccountData, RoleData, TrainingData, EmployeeData, StudentData
 
 
 def account_orm_to_account_data(it: AccountOrm) -> AccountData:
@@ -33,8 +33,22 @@ def account_orm_to_employee_data(it: AccountOrm, roles: list[RoleData]) -> Emplo
     )
 
 
+def account_orm_to_student_data(it: AccountOrm, training: Optional[TrainingData]) -> StudentData:
+    return StudentData(
+        id=it.id,
+        type=it.type,
+        email=it.email,
+        date_create=it.date_create,
+        first_name=it.first_name,
+        last_name=it.last_name,
+        patronymic=it.patronymic,
+        training_id=it.training_id,
+        date_complete_training=it.date_complete_training,
+        training=training,
+    )
 
-def training_orm_to_training_data(it: TrainingOrm) -> TrainingData:
+
+def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[AccountData]]) -> TrainingData:
     return TrainingData(
         id=it.id,
         name=it.name,
@@ -44,6 +58,7 @@ def training_orm_to_training_data(it: TrainingOrm) -> TrainingData:
         date_create=it.date_create,
         date_start=it.date_start,
         date_end=it.date_end,
+        students=students,
     )
 
 

@@ -11,11 +11,12 @@ from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
     KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, EmailValueError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
-    training_orm_to_training_data, account_orm_to_employee_data
+    training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
     TrainingAndRoleOrm, RoleAndAccountOrm
-from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData
-from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check
+from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData
+from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
+    empty_check
 
 
 class ValidateByTokenData:
@@ -125,10 +126,8 @@ async def get_employee_by_id(token: str, employee_id: int) -> EmployeeData:
         token_data = await __validate_by_token(s, token)
         if token_data.account.type != AccountType.ADMIN:
             raise AccessError
-        query = await s.execute(
-            select(AccountOrm).options(joinedload(AccountOrm.roles))
-            .filter(AccountOrm.type == AccountType.EMPLOYEE, AccountOrm.id == employee_id)
-        )
+        query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
+                                .filter(AccountOrm.type == AccountType.EMPLOYEE, AccountOrm.id == employee_id))
         employee = query.scalars().first()
         if not employee:
             raise NotFoundError()
@@ -141,8 +140,8 @@ async def __create_account(s: AsyncSession, account_type: AccountType, first_nam
                            email: Optional[str] = None, training: Optional[int] = None) -> CreatedAccountData:
     email_check(email)
     initials_check(first_name, last_name, patronymic)
-    employees_orm = AccountOrm(type=AccountType.EMPLOYEE, email=email, first_name=first_name, last_name=last_name,
-                               patronymic=patronymic)
+    employees_orm = AccountOrm(type=account_type, email=email, first_name=first_name, last_name=last_name,
+                               patronymic=patronymic, training=training)
     s.add(employees_orm)
     await s.flush()
     key_orm = KeyOrm(account_id=employees_orm.id)
@@ -202,6 +201,41 @@ async def update_employee(token: str, employee_id: int, first_name: Optional[str
         await s.commit()
 
 
+@typechecked
+async def add_role_to_employee(token: str, employee_id: int, role_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(AccountOrm).filter(AccountOrm.id == employee_id))
+        employee = query.scalars().first()
+        query = await s.execute(select(RoleOrm).filter(RoleOrm.id == role_id))
+        role = query.scalars().first()
+        if employee.type != AccountType.EMPLOYEE:
+            raise ValueError("Only for employees")
+        if not employee or not role:
+            raise NotFoundError()
+        account_and_role = RoleAndAccountOrm(account_id=employee_id, role_id=role_id)
+        s.add(account_and_role)
+        await s.commit()
+
+
+@typechecked
+async def remove_role_from_employee(token: str, employee_id: int, role_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(RoleAndAccountOrm)
+                                .filter(RoleAndAccountOrm.role_id == role_id)
+                                .filter(RoleAndAccountOrm.account_id == employee_id))
+        account_and_role = query.scalars().first()
+        if not account_and_role:
+            raise NotFoundError()
+        await s.delete(account_and_role)
+        await s.commit()
+
+
 # Roles
 @typechecked
 async def create_role(token: str, name: str) -> RoleData:
@@ -256,13 +290,25 @@ async def update_role(token: str, role_id: int, name: str):
 
 
 @typechecked
-async def get_all_roles(token: str) -> list[RoleData]:
+async def get_all_roles(token: str, account_id: Optional[int] = None) -> list[RoleData]:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type != AccountType.ADMIN:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError
-        query = await s.execute(select(RoleOrm))
-        roles = [role_orm_to_role_data(i) for i in query.scalars().all()]
+        if token_data.account.type == AccountType.EMPLOYEE and not account_id:
+            account_id = token_data.account.id
+        if account_id:
+            query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
+                                    .filter(AccountOrm.id == account_id))
+            account = query.scalars().first()
+            if not account:
+                raise NotFoundError
+            if account.type != AccountType.EMPLOYEE:
+                raise ValueError("Only for employees")
+            roles = [role_orm_to_role_data(i) for i in account.roles]
+        else:
+            query = await s.execute(select(RoleOrm))
+            roles = [role_orm_to_role_data(i) for i in query.scalars().all()]
         return roles
 
 
@@ -270,21 +316,86 @@ async def get_all_roles(token: str) -> list[RoleData]:
 async def get_role_by_id(token: str, role_id: int) -> RoleData:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type != AccountType.ADMIN:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError
         query = await s.execute(select(RoleOrm).filter(RoleOrm.id == role_id))
         role_orm = query.scalars().first()
         if not role_orm:
             raise NotFoundError
-        query = await s.execute(select(TrainingOrm)
-                                .join(TrainingAndRoleOrm, TrainingOrm.id == TrainingAndRoleOrm.training_id)
-                                .join(RoleOrm, RoleOrm.id == TrainingAndRoleOrm.role_id)
-                                .filter(RoleOrm.id == role_id))
-        trainings = [training_orm_to_training_data(i) for i in query.scalars().all()]
-        query = await s.execute(select(AccountOrm)
-                                .join(RoleAndAccountOrm, RoleAndAccountOrm.account_id == AccountOrm.id)
-                                .join(RoleOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
-                                .filter(RoleOrm.id == role_id))
-        accounts = [account_orm_to_account_data(i) for i in query.scalars().all()]
+        if token_data.account.type == AccountType.EMPLOYEE:
+            query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
+                                    .filter(AccountOrm.id == token_data.account.id))
+            allowed_role_ids = [i.id for i in query.scalars().unique().first().roles]
+            if role_id not in allowed_role_ids:
+                raise AccessError()
+        query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.accounts))
+                                .options(joinedload(RoleOrm.trainings)).filter(RoleOrm.id == role_id))
+        role = query.scalars().unique().first()
+        trainings = [training_orm_to_training_data(i, None) for i in role.trainings]
+        accounts = [account_orm_to_account_data(i) for i in role.accounts]
         role = role_orm_to_role_data(role_orm, trainings, accounts)
         return role
+
+
+# Trainings
+@typechecked
+async def create_training(token: str, name: str, start_text: Optional[str] = None,
+                          html_start_text: Optional[str] = None, role_id: Optional[int] = None) -> TrainingData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
+                                    .filter(AccountOrm.id == token_data.account.id))
+            allowed_role_ids = [i.id for i in query.scalars().first().roles]
+            if role_id is None and len(allowed_role_ids) == 1:
+                role_id = allowed_role_ids[0]
+            if role_id is None:
+                raise ValueError("The employee must enter the role_id")
+            if role_id not in allowed_role_ids:
+                raise AccessError("The employee does not have this role")
+        empty_check(name)
+        new_training = TrainingOrm(name=name)
+        if bool(start_text) != bool(html_start_text):
+            raise ValueError("The start_text has a value, but html_start_text does not, or vice versa")
+        elif start_text:
+            new_training.start_text = start_text
+            new_training.html_start_text = html_start_text
+        s.add(new_training)
+        await s.flush()
+        training_data = training_orm_to_training_data(new_training, students=None)
+        if role_id:
+            training_and_role = TrainingAndRoleOrm(role_id=role_id, training_id=new_training.id)
+            s.add(training_and_role)
+        await s.commit()
+        return training_data
+
+
+@typechecked
+async def get_all_my_trainings(token: str):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            query = await s.execute(select(RoleOrm)
+                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
+                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
+            roles = query.scalars().all()
+            if not roles:
+                raise AccessError()
+            query = await s.execute(select(TrainingOrm)
+                                    .options(joinedload(TrainingOrm.students))
+                                    .join(TrainingAndRoleOrm, TrainingOrm.id == TrainingAndRoleOrm.training_id)
+                                    .join(RoleOrm, TrainingAndRoleOrm.role_id == RoleOrm.id)
+                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
+                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
+        else:
+            query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students)))
+        trainings = query.scalars().unique().all()
+        trainings_data = []
+        for i in trainings:
+            students = [account_orm_to_student_data(n, None) for n in i.students]
+            trainings_data.append(training_orm_to_training_data(i, students))
+        return trainings_data

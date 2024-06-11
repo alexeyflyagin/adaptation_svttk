@@ -57,6 +57,7 @@ class TrainingData:
     date_create: int
     date_start: Optional[int]
     date_end: Optional[int]
+    students: Optional[list[AccountData]]
 
 
 @dataclasses.dataclass
@@ -71,3 +72,8 @@ class RoleData:
 @dataclasses.dataclass
 class EmployeeData(AccountData):
     roles: list[RoleData]
+
+
+@dataclasses.dataclass
+class StudentData(AccountData):
+    training: TrainingData

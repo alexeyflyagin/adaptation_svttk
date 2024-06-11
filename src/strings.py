@@ -1,9 +1,16 @@
 from src import commands
 
+
+def code(it: str):
+    return f"<code>{it}</code>"
+
+
 # BTNs
 BTN_CREATE = "+ Создать"
 BTN_ADD = "+ Добавить"
 BTN_BACK = "« Назад"
+BTN_SAVE = "✓ Сохранить"
+BTN_SAVE_SYMBOL = "✓"
 BTN_DELETE_YES = "Да, всё верно!"
 BTN_DELETE_NO = "Нет"
 BTN_DELETE_NO_1 = "Отменить!"
@@ -14,6 +21,7 @@ BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
 BTN_PIN = "Закрепить"
 BTN_LOG_IN = "Войти"
+BTN_ROLES = "Роли"
 
 
 # DateFormats
@@ -59,9 +67,23 @@ LOG_IN__NO_ACCESS_KEY = """
 HELP__NO_AUTHORIZATION = """Для начала необходимо войти в аккаунт по ссылке, содержащей в себе ключ доступа."""
 
 
-HELP__ADMIN = f"""
+HELP__ADMIN = f"""Список команд, доступных вам.
+
+Мой аккаунт
+/{commands.MYACCOUNT.command} - {commands.MYACCOUNT.description}
+
+Основное
 /{commands.EMPLOYEES.command} - {commands.EMPLOYEES.description}
 /{commands.ROLES.command} - {commands.ROLES.description}
+/{commands.TRAININGS.command} - {commands.TRAININGS.description}
+"""
+
+HELP__EMPLOYEE = f"""Список команд, доступных вам.
+
+Мой аккаунт
+/{commands.MYACCOUNT.command} - {commands.MYACCOUNT.description}
+
+Основное
 /{commands.TRAININGS.command} - {commands.TRAININGS.description}
 """
 
@@ -125,7 +147,8 @@ EMPTY_FIELD = """-"""
 EMPLOYEES = """
 {items}
 —
-Выбирете существующего сотрудника или пригласите нового."""
+Выберите сотрудника.
+"""
 
 EMPLOYEES__EMPTY = """Список сотрудников пуст. Добавьте первого сотрудника."""
 
@@ -138,7 +161,8 @@ CREATE_EMPLOYEE__ERROR_FORMAT = f"""<b>Ошибка!</b> Формат ФИО н�
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-CREATE_EMPLOYEE__SUCCESS = f"""Аккаунт для сотрудника  <code>{{full_name}}</code>  готов!
+CREATE_EMPLOYEE__SUCCESS = f"""Аккаунт для сотрудника готов!
+
 Ключ доступа: <tg-spoiler>{{access_key}}</tg-spoiler>
 
 <code>{{access_link}}</code>
@@ -156,14 +180,14 @@ Email: {email}
 
 EMPLOYEE__NOT_FOUND = """Ошибка! Сотрудник не найден."""
 
-EMPLOYEE__DELETED = """Сотрудник успешно {full_name} удален."""
+EMPLOYEE__DELETED = """Сотрудник успешно удален."""
 
-EMPLOYEE_DELETE = f"""После подтверждения действия, сотрудник будет навсегда удалена!
+EMPLOYEE_DELETE = f"""После подтверждения действия, сотрудник будет навсегда удален!
 —
 Вы действительно хотите удалить сотрудника
-'<code>{{full_name}}</code>'?"""
+<code>{{full_name}}</code>?"""
 
-EMPLOYEE_INVITE = f"""Приглашаю вас, {{first_name}}, в аккаунт сотрудника.
+EMPLOYEE_INVITE = f"""Приглашаю вас в аккаунт сотрудника.
 Присоединяйтесь, перейдя по ссылке: {{invite_link}}"""
 
 EMPLOYEE__EDIT_EMAIL = f"""Введите <b>email</b>.
@@ -171,7 +195,25 @@ EMPLOYEE__EDIT_EMAIL = f"""Введите <b>email</b>.
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-EMPLOYEE__EDIT_EMAIL__SUCCESS = f"""Email сотрудника  <code>{{full_name}}</code>  успешно изменен!"""
+EMPLOYEE__EDIT_EMAIL__SUCCESS = f"""Email сотрудника успешно изменен!"""
+
+EMPLOYEE__ROLES__REMOVED = """Роль '{role_name}' отвязана от аккаунта."""
+
+EMPLOYEE__ROLES__ADDED = """Роль '{role_name}' привязана к аккаунту."""
+
+EMPLOYEE__ALL_ROLES = f"""Выбери роль, которую хочешь добавить."""
+
+EMPLOYEE__ALL_ROLES__FULL = f"""Вы добавили все роли. Вы можете создать новую роль.
+
+/{commands.ROLES.command} - {commands.ROLES.description}"""
+
+EMPLOYEE__ALL_ROLES__NOT_FOUND = f"""Ролей нет. Сначала добавьте их.
+
+/{commands.ROLES.command} - {commands.ROLES.description}"""
+
+EMPLOYEE__ROLES = f"""Все роли аккаунта  <code>{{full_name}}</code>.
+—
+Нажми на роль, чтобы отвязать её."""
 
 EMPLOYEE__EDIT_EMAIL__EMAIL_ERROR = f"""<b>Ошибка!</b> Email должен содержать '<code>@</code>'.
 Пример: <code>ivanov_ivan66@email.ru</code>
@@ -179,5 +221,38 @@ EMPLOYEE__EDIT_EMAIL__EMAIL_ERROR = f"""<b>Ошибка!</b> Email должен 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
 
+# Trainings
+TRAININGS_ITEM = """<b>{index}</b>  <b>{title}</b>
+<i>{status} | {student_counter}</i>"""
 
+TRAININGS = """
+{items}
+—
+Выбирете существующий курс или создайте новый."""
+
+TRAININGS__EMPTY = """Список курсов пуст. Создайте первый курс."""
+
+TRAININGS__UNAVAILABLE = """У вас нет доступа к курсам."""
+
+TRAINING_STATUS__INACTIVE = """Не запущен"""
+TRAINING_STATUS__ACTIVE = """Активный"""
+TRAINING_STATUS__COMPLETED = """Завершен"""
+
+CREATE_TRAINING__NAME = f"""Введите название нового курса.
+(Рекомендуемая длинна: 2-3 слова)
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+
+CREATE_TRAINING__ROLE = f"""Выберите роль, которой будет привязан курс.
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+
+CREATE_TRAINING__ROLE__SELECTED = f"""Выберите роль, которой будет привязан курс.
+
+Выбрана роль '<code>{{role_name}}</code>'."""
+
+
+CREATE_TRAINING__CREATED = f"""Новый курс успешно создан."""
 

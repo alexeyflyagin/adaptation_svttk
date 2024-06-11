@@ -11,6 +11,10 @@ class InitialsValueError(Exception):
     pass
 
 
+class EmptyFieldError(Exception):
+    pass
+
+
 class KeyIsBusyError(Exception):
     pass
 

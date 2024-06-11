@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from asyncio import CancelledError
 
 from aiogram import Bot, Dispatcher
@@ -13,6 +14,7 @@ from config import settings
 
 
 async def main():
+    # logging.basicConfig(level=logging.INFO)
     bot_properties = DefaultBotProperties(parse_mode="HTML")
     bot = Bot(token=settings.BOT_TOKEN, default=bot_properties)
     storage = CustomStorage(ignore_users_id=[bot.id])

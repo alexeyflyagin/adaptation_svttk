@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardButton, CallbackQuery, SwitchInlineQueryChosenChat
+from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service import asvttk_service as service
@@ -17,7 +17,8 @@ from handlers.handlers_delete import show_delete, DeleteItemCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, RoleCreateStates, RoleRenameStates
-from src.utils import get_full_name, get_access_key_link
+from src.strings import code
+from src.utils import get_full_name
 
 router = Router()
 
@@ -31,12 +32,12 @@ class RolesCD(CallbackData, prefix="roles"):
 class RoleCD(CallbackData, prefix="role"):
     token: str
     role_id: Optional[int] = None
-    action: str
+    action: int
 
     class Action:
-        DELETE = "delete"
-        BACK = "back"
-        RENAME = "rename"
+        DELETE = 0
+        BACK = 1
+        RENAME = 2
 
 
 def roles_keyboard(token: str, items: list[RoleData]):
@@ -74,6 +75,9 @@ async def roles_callback(callback: CallbackQuery, state: FSMContext):
         else:
             await show_role(data.token, data.role_id, callback.message)
             await state.update_data({"updated_msg_id": None})
+        await callback.answer()
+    except NotFoundError:
+        await show_role(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
@@ -199,9 +203,9 @@ async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id
     text = strings.ROLE__NOT_FOUND
     try:
         role = await service.get_role_by_id(token, role_id)
-        employees_list = ", ".join([get_full_name(i.first_name, i.last_name, i.patronymic) for i in role.accounts])
+        employees_list = " | ".join([code(get_full_name(i.first_name, i.last_name, i.patronymic)) for i in role.accounts])
         employees_list = employees_list if employees_list else "-"
-        trainings_list = ", ".join([i.name for i in role.trainings])
+        trainings_list = " | ".join([code(i.name) for i in role.trainings])
         trainings_list = trainings_list if trainings_list else "-"
         date_create = datetime.fromtimestamp(role.date_create).strftime(strings.DATE_FORMAT_FULL)
         text = strings.ROLE.format(role_name=role.name, date_create=date_create, employees_list=employees_list,
