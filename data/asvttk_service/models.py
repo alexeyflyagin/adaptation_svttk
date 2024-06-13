@@ -14,6 +14,11 @@ class AccountType(Enum):
     STUDENT = 8
 
 
+class LevelType(Enum):
+    INFO = 0
+    QUIZ = 1
+
+
 Base = declarative_base()
 
 
@@ -103,6 +108,7 @@ class TrainingOrm(Base):
         "RoleOrm", secondary="training_and_roles", secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
         primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings"
     )
+    levels = relationship("LevelOrm", back_populates="training")
 
 
 class LevelOrm(Base):
@@ -113,7 +119,7 @@ class LevelOrm(Base):
     next_level_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("levels.id", ondelete="SET NULL"), nullable=True)
     training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id", ondelete="CASCADE"))
-    type: Mapped[str]
+    type: Mapped[LevelType] = mapped_column(sqlalchemy.Enum(LevelType))
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     title: Mapped[str]
     text: Mapped[Optional[str]] = mapped_column(nullable=True)
@@ -124,6 +130,8 @@ class LevelOrm(Base):
     options: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     correct_option_ids: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
     quiz_comment: Mapped[Optional[str]] = mapped_column(nullable=True)
+
+    training = relationship("TrainingOrm", back_populates="levels")
 
 
 class LevelAnswerOrm(Base):

@@ -56,5 +56,5 @@ async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, key
             await msg.edit_text(text=text, reply_markup=keyboard)
         else:
             await msg.answer(text=text, reply_markup=keyboard)
-    except TelegramBadRequest:
+    except TelegramBadRequest as _:
         pass

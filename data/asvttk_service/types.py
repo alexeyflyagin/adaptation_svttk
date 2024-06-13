@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Optional
 
-from data.asvttk_service.models import AccountType
+from data.asvttk_service.models import AccountType, LevelType
 
 
 @dataclasses.dataclass
@@ -58,6 +58,7 @@ class TrainingData:
     date_start: Optional[int]
     date_end: Optional[int]
     students: Optional[list[AccountData]]
+    levels: Optional[list["LevelData"]]
 
 
 @dataclasses.dataclass
@@ -77,3 +78,24 @@ class EmployeeData(AccountData):
 @dataclasses.dataclass
 class StudentData(AccountData):
     training: TrainingData
+
+
+@dataclasses.dataclass
+class LevelData:
+    id: int
+    previous_level_id: int
+    next_level_id: int
+    training_id: int
+    type: LevelType
+    date_create: int
+    title: str
+    text: Optional[str]
+    html_text: Optional[str]
+    photo_ids: Optional[list[str]]
+    video_ids: Optional[list[str]]
+    document_ids: Optional[list[str]]
+    options: Optional[list[str]]
+    correct_option_ids: Optional[list[int]]
+    quiz_comment: Optional[str]
+    training: Optional[TrainingData]
+

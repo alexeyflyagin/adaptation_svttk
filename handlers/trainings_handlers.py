@@ -1,12 +1,16 @@
+from datetime import datetime
 from typing import Optional, Any
 
 from aiogram import Router, F
 from aiogram.filters import Command
+from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from data.asvttk_service.exceptions import TokenNotValidError, AccessError, EmptyFieldError
+from data.asvttk_service.exceptions import TokenNotValidError, AccessError, EmptyFieldError, NotFoundError
 from data.asvttk_service.types import TrainingData
+from handlers.handlers_delete import delete_keyboard, DeleteItemCD, show_delete
 from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, list_keyboard, get_items_by_page, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from data.asvttk_service import asvttk_service as service
@@ -18,6 +22,33 @@ router = Router()
 
 TAG_TRAININGS = "trainings"
 TAG_CHOOSE_ROLE = "choose_role"
+TAG_TRAINING_DELETE = "training_del"
+
+
+class TrainingCD(CallbackData, prefix="training"):
+    token: str
+    training_id: Optional[int] = None
+    page_index: int
+    action: int
+
+    class Action:
+        BACK = 0
+        DELETE = 1
+
+
+def training_keyboard(token: str, page_index: int, training_id: Optional[int] = None):
+    kbb = InlineKeyboardBuilder()
+    adjust = []
+    if training_id:
+        btn_delete_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
+                                     action=TrainingCD.Action.DELETE)
+        kbb.add(InlineKeyboardButton(text=strings.BTN_DELETE, callback_data=btn_delete_data.pack()))
+        adjust.append(1)
+    btn_back_data = TrainingCD(token=token, page_index=page_index, action=TrainingCD.Action.BACK)
+    kbb.add(InlineKeyboardButton(text=strings.BTN_BACK, callback_data=btn_back_data.pack()))
+    adjust.append(1)
+    kbb.adjust(*adjust)
+    return kbb.as_markup()
 
 
 @router.message(MainStates.ADMIN, Command(commands.TRAININGS))
@@ -40,7 +71,49 @@ async def trainings_callback(callback: CallbackQuery, state: FSMContext):
             await state.set_state(TrainingCreateStates.NAME)
             await callback.message.answer(strings.CREATE_TRAINING__NAME)
             await state.update_data({"updated_msg": [callback.message.message_id, data.page_index]})
+        elif data.action == data.Action.SELECT:
+            await show_training(data.token, data.selected_item_id, callback.message, data.page_index, is_answer=False)
+        elif data.action == data.Action.PREVIOUS_PAGE:
+            await show_trainings(data.token, callback.message, page_index=data.page_index - 1, is_answer=False)
+        elif data.action == data.Action.NEXT_PAGE:
+            await show_trainings(data.token, callback.message, page_index=data.page_index + 1, is_answer=False)
+        elif data.action == data.Action.COUNTER:
+            await show_trainings(data.token, callback.message, page_index=data.page_index, is_answer=False)
+        await callback.answer()
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback)
+
+
+@router.callback_query(TrainingCD.filter())
+async def training_callback(callback: CallbackQuery, state: FSMContext):
+    data = TrainingCD.unpack(callback.data)
+    try:
+        if data.action == data.Action.BACK:
+            await show_trainings(data.token, callback.message, data.page_index, is_answer=False)
+        if data.action == data.Action.DELETE:
+            training = await service.get_training_by_id(data.token, data.training_id)
+            text = strings.TRAINING__DELETE.format(training_name=training.name)
+            await show_delete(data.token, callback.message, tag=TAG_TRAINING_DELETE, deleted_item_id=data.training_id,
+                              args=data.page_index, is_answer=False, text=text)
+        await callback.answer()
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback)
+
+
+@router.callback_query(DeleteItemCD.filter(F.tag == TAG_TRAINING_DELETE))
+async def delete_training_callback(callback: CallbackQuery):
+    data = DeleteItemCD.unpack(callback.data)
+    page_index = int(data.args)
+    try:
+        if data.is_delete:
+            await service.delete_training(data.token, data.deleted_item_id)
+            await show_trainings(data.token, callback.message, page_index, is_answer=False)
+            await callback.answer(strings.TRAINING__DELETED)
+        else:
+            await show_training(data.token, data.deleted_item_id, callback.message, page_index, is_answer=False)
             await callback.answer()
+    except NotFoundError:
+        await show_training(data.token, data.deleted_item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
 
@@ -95,7 +168,7 @@ async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_m
     text = strings.TRAININGS__UNAVAILABLE
     keyboard = None
     try:
-        trainings = await service.get_all_my_trainings(token)
+        trainings = await service.get_all_trainings(token)
         list_items = [ListItem(str(i + 1), trainings[i].id) for i in range(len(trainings))]
         pages = get_pages(list_items)
         page_index = get_safe_page_index(page_index, len(pages))
@@ -113,6 +186,25 @@ async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_m
         text = "\n\n".join(str_items)
         if not trainings:
             text = strings.TRAININGS__EMPTY
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
+    except AccessError:
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
+
+
+async def show_training(token: str, training_id: int, msg: Message, page_index: int = 0,
+                        edited_msg_id: Optional[int] = None, is_answer: bool = True):
+    text = strings.TRAINING__NOT_FOUND
+    keyboard = training_keyboard(token, page_index)
+    try:
+        training = await service.get_training_by_id(token, training_id)
+        keyboard = training_keyboard(token, page_index, training_id)
+        text = strings.TRAINING.format(
+            name=training.name,
+            level_counter=len(training.levels),
+            students_counter=len(training.students),
+            status=get_training_status(training),
+            data_create=datetime.fromtimestamp(training.date_create).strftime(strings.DATE_FORMAT_FULL),
+        )
         await show(msg, text, is_answer, edited_msg_id, keyboard)
     except AccessError:
         await show(msg, text, is_answer, edited_msg_id, keyboard)

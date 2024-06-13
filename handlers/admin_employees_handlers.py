@@ -18,6 +18,7 @@ from handlers.handlers_list import list_keyboard, get_pages, ListItem, get_items
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, EmployeeCreateStates, EmployeeEditEmailStates
+from src.strings import code
 from src.utils import get_full_name_by_account, get_access_key_link, show
 
 router = Router()
@@ -109,7 +110,7 @@ async def create_employee_handler(msg: Message, state: FSMContext):
         return
     try:
         initials = [i.replace(" ", "") for i in msg.text.split()]
-        if len(initials) != 3:
+        if len(initials) != 3 or initials[1] == '-':
             raise InitialsValueError()
         initials = [None if i == "-" else i for i in msg.text.split()]
         acc_data = await service.create_employee(token, first_name=initials[1], last_name=initials[0],
@@ -292,7 +293,7 @@ async def show_employee(token: str, employee_id: int, msg: Message, page_index: 
     try:
         employee = await service.get_employee_by_id(token, employee_id)
         keyboard = employee_keyboard(token, page_index, employee_id)
-        roles_list = ", ".join([i.name for i in employee.roles])
+        roles_list = " | ".join([code(i.name) for i in employee.roles])
         text = strings.EMPLOYEE.format(
             date_create=datetime.fromtimestamp(employee.date_create).strftime(strings.DATE_FORMAT_FULL),
             last_name=employee.last_name if employee.last_name else strings.EMPTY_FIELD,

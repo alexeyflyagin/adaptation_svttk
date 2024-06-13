@@ -14,13 +14,17 @@ from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import RoleNotUniqueNameError, NotFoundError, TokenNotValidError
 from data.asvttk_service.types import RoleData
 from handlers.handlers_delete import show_delete, DeleteItemCD
+from handlers.handlers_list import ListItem, list_keyboard, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
 from src.states import MainStates, RoleCreateStates, RoleRenameStates
 from src.strings import code
-from src.utils import get_full_name
+from src.utils import get_full_name, show, cut_text
 
 router = Router()
+
+TAG_ROLE_TRAININGS = "role_trains"
+TAG_ROLE_ADD_TRAININGS = "role_add_trains"
 
 
 class RolesCD(CallbackData, prefix="roles"):
@@ -38,6 +42,7 @@ class RoleCD(CallbackData, prefix="role"):
         DELETE = 0
         BACK = 1
         RENAME = 2
+        TRAININGS = 3
 
 
 def roles_keyboard(token: str, items: list[RoleData]):
@@ -53,8 +58,10 @@ def roles_keyboard(token: str, items: list[RoleData]):
 def role_keyboard(token: str, role_id: Optional[int] = None):
     kbb = InlineKeyboardBuilder()
     if role_id:
+        btn_trainings_data = RoleCD(token=token, action=RoleCD.Action.TRAININGS, role_id=role_id).pack()
         btn_delete_data = RoleCD(token=token, action=RoleCD.Action.DELETE, role_id=role_id).pack()
         btn_rename_data = RoleCD(token=token, action=RoleCD.Action.RENAME, role_id=role_id).pack()
+        kbb.add(InlineKeyboardButton(text=strings.BTN_TRAININGS, callback_data=btn_trainings_data))
         kbb.add(InlineKeyboardButton(text=strings.BTN_RENAME, callback_data=btn_rename_data))
         kbb.add(InlineKeyboardButton(text=strings.BTN_DELETE, callback_data=btn_delete_data))
     kbb.adjust(2)
@@ -90,22 +97,68 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_roles(data.token, callback.message, is_answer=False)
             await state.update_data({"updated_msg_id": None})
-        if data.action == data.Action.DELETE:
+        elif data.action == data.Action.DELETE:
             role = await service.get_role_by_id(data.token, data.role_id)
             text = strings.ROLE_DELETE.format(role_name=role.name)
             await show_delete(data.token, callback.message, deleted_item_id=data.role_id, text=text, tag="role",
                               is_answer=False)
             await state.update_data({"updated_msg_id": None})
-        if data.action == data.Action.RENAME:
+        elif data.action == data.Action.RENAME:
             role = await service.get_role_by_id(data.token, data.role_id)
             await state.set_state(RoleRenameStates.RENAME)
             await state.update_data({"updated_item_id": role.id})
             await state.update_data({"updated_msg_id": callback.message.message_id})
             await callback.message.answer(strings.ROLE__RENAME.format(role_name=role.name))
+        elif data.action == data.Action.TRAININGS:
+            await show_edit_trainings(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
     except NotFoundError:
         await show_role(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback)
+
+
+@router.callback_query(ListCD.filter(F.tag == TAG_ROLE_TRAININGS))
+async def edit_trainings_callback(callback: CallbackQuery):
+    data = ListCD.unpack(callback.data)
+    role_id = int(data.arg)
+    try:
+        await service.token_validate(data.token)
+        if data.action == data.Action.SELECT:
+            training = await service.get_training_by_id(data.token, training_id=data.selected_item_id)
+            await service.remove_training_from_role(data.token, role_id=role_id, training_id=training.id)
+            await callback.answer(strings.ROLE__TRAININGS__REMOVED.format(training_name=training.name))
+            await show_edit_trainings(data.token, role_id, callback.message, is_answer=False)
+        elif data.action == data.Action.ADD:
+            await show_add_trainings(data.token, role_id, callback.message, is_answer=False)
+            await callback.answer()
+        elif data.action == data.Action.BACK:
+            await show_role(data.token, role_id, callback.message, is_answer=False)
+    except NotFoundError:
+        await callback.answer(text=strings.ROLE__NOT_FOUND)
+        await show_role(data.token, role_id, callback.message, is_answer=False)
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback)
+
+
+@router.callback_query(ListCD.filter(F.tag == TAG_ROLE_ADD_TRAININGS))
+async def add_trainings_employee_callback(callback: CallbackQuery):
+    data = ListCD.unpack(callback.data)
+    role_id = int(data.arg)
+    try:
+        await service.token_validate(data.token)
+        if data.action == data.Action.SELECT:
+            training = await service.get_training_by_id(data.token, training_id=data.selected_item_id)
+            await service.add_training_to_role(data.token, role_id=role_id, training_id=training.id)
+            await callback.answer(strings.ROLE__TRAININGS__ADDED.format(training_name=cut_text(training.name)))
+            await show_edit_trainings(data.token, role_id, callback.message, is_answer=False)
+        elif data.action == data.Action.BACK:
+            await show_edit_trainings(data.token, role_id, callback.message, is_answer=False)
+            await callback.answer()
+    except NotFoundError:
+        await callback.answer(text=strings.ROLE__NOT_FOUND)
+        await show(callback.message, strings.ROLE__NOT_FOUND, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
 
@@ -203,7 +256,8 @@ async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id
     text = strings.ROLE__NOT_FOUND
     try:
         role = await service.get_role_by_id(token, role_id)
-        employees_list = " | ".join([code(get_full_name(i.first_name, i.last_name, i.patronymic)) for i in role.accounts])
+        employees_list = " | ".join(
+            [code(get_full_name(i.first_name, i.last_name, i.patronymic)) for i in role.accounts])
         employees_list = employees_list if employees_list else "-"
         trainings_list = " | ".join([code(i.name) for i in role.trainings])
         trainings_list = trainings_list if trainings_list else "-"
@@ -224,3 +278,34 @@ async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id
     except NotFoundError:
         await msg.edit_text(text=text, reply_markup=keyboard)
 
+
+async def show_edit_trainings(token: str, role_id: int, msg: Message, is_answer: bool = True):
+    try:
+        role = await service.get_role_by_id(token, role_id)
+        trainings = role.trainings
+        list_items = [ListItem(i.name, i.id) for i in trainings]
+        keyboard = list_keyboard(token, tag=TAG_ROLE_TRAININGS, pages=[list_items], max_btn_in_row=2,
+                                 arg=role_id, back_btn_text=strings.BTN_BACK)
+        text = strings.ROLE__TRAININGS.format(role_name=role.name)
+        await show(msg, text, is_answer, keyboard=keyboard)
+    except NotFoundError:
+        await show(msg, strings.ROLE__NOT_FOUND, is_answer=True)
+
+
+async def show_add_trainings(token: str, role_id: int, msg: Message, is_answer: bool = True):
+    try:
+        text = strings.ROLE__ALL_TRAININGS__FULL
+        all_trainings = await service.get_all_trainings(token)
+        role = await service.get_role_by_id(token, role_id)
+        exist_trainings_ids = [i.id for i in role.trainings]
+        trainings = [i for i in all_trainings if i.id not in exist_trainings_ids]
+        list_items = [ListItem(cut_text(i.name, max_symbols=16), i.id) for i in trainings]
+        keyboard = list_keyboard(token, tag=TAG_ROLE_ADD_TRAININGS, pages=[list_items], max_btn_in_row=1,
+                                 arg=role_id, add_btn_text=None, back_btn_text=strings.BTN_BACK)
+        if trainings:
+            text = strings.EMPLOYEE__ALL_ROLES
+        elif not all_trainings:
+            text = strings.EMPLOYEE__ALL_ROLES__NOT_FOUND
+        await show(msg, text, is_answer, keyboard=keyboard)
+    except NotFoundError:
+        await show(msg, strings.EMPLOYEE__NOT_FOUND, is_answer=True)

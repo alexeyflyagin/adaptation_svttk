@@ -16,6 +16,7 @@ BTN_DELETE_NO = "Нет"
 BTN_DELETE_NO_1 = "Отменить!"
 BTN_DELETE_BACK = "« Назад"
 BTN_DELETE = "Удалить"
+BTN_TRAININGS = "Курсы"
 BTN_EDIT_EMAIL = "Изм. email"
 BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
@@ -135,6 +136,10 @@ ROLE_DELETED = f"""Роль '{{role_name}}' удалена!"""
 
 ROLE__NOT_FOUND = f"""Ошибка! Роль не найдена."""
 
+ROLE__TRAININGS = f"""Все курсы у роли  '<code>{{role_name}}</code>'.
+—
+Нажми на курс, чтобы отвязать его."""
+
 
 # Employees
 EMPLOYEES_ITEM = """<b>{index}</b>  <b>{full_name}</b>
@@ -171,10 +176,10 @@ CREATE_EMPLOYEE__SUCCESS = f"""Аккаунт для сотрудника гот
 
 
 EMPLOYEE = """Сотрудник
-Добавлен:  <code>{date_create}</code>
 Фамилия:  <code>{last_name}</code>
 Имя:  <code>{first_name}</code>
 Отчество:  <code>{patronymic}</code>
+Добавлен:  <code>{date_create}</code>
 Email: {email}
 Роли:  {roles_list}"""
 
@@ -203,7 +208,7 @@ EMPLOYEE__ROLES__ADDED = """Роль '{role_name}' привязана к акк�
 
 EMPLOYEE__ALL_ROLES = f"""Выбери роль, которую хочешь добавить."""
 
-EMPLOYEE__ALL_ROLES__FULL = f"""Вы добавили все роли. Вы можете создать новую роль.
+EMPLOYEE__ALL_ROLES__FULL = f"""Вы добавили все роли. Вы можете создать новую.
 
 /{commands.ROLES.command} - {commands.ROLES.description}"""
 
@@ -223,7 +228,7 @@ EMPLOYEE__EDIT_EMAIL__EMAIL_ERROR = f"""<b>Ошибка!</b> Email должен 
 
 # Trainings
 TRAININGS_ITEM = """<b>{index}</b>  <b>{title}</b>
-<i>{status} | {student_counter}</i>"""
+{status} | {student_counter}"""
 
 TRAININGS = """
 {items}
@@ -234,9 +239,9 @@ TRAININGS__EMPTY = """Список курсов пуст. Создайте пе�
 
 TRAININGS__UNAVAILABLE = """У вас нет доступа к курсам."""
 
-TRAINING_STATUS__INACTIVE = """Не запущен"""
-TRAINING_STATUS__ACTIVE = """Активный"""
-TRAINING_STATUS__COMPLETED = """Завершен"""
+TRAINING_STATUS__INACTIVE = """<i>Не запущен</i>"""
+TRAINING_STATUS__ACTIVE = """<b>Активный</b>"""
+TRAINING_STATUS__COMPLETED = """<b>Завершен</b>"""
 
 CREATE_TRAINING__NAME = f"""Введите название нового курса.
 (Рекомендуемая длинна: 2-3 слова)
@@ -255,4 +260,33 @@ CREATE_TRAINING__ROLE__SELECTED = f"""Выберите роль, которой 
 
 
 CREATE_TRAINING__CREATED = f"""Новый курс успешно создан."""
+
+TRAINING__NOT_FOUND = """Курс не найден."""
+
+TRAINING = """<code>{name}</code>
+Уровней:  <code>{level_counter}</code>
+Статус:  <i>{status}</i>
+Дата создания:  <code>{data_create}</code>
+Учеников:  <code>{students_counter}</code>"""
+
+TRAINING__DELETED = """Курс успешно удален."""
+
+TRAINING__DELETE = f"""После подтверждения действия, курс будет навсегда удален!
+—
+Вы действительно хотите удалить курс
+<code>{{training_name}}</code>?"""
+
+ROLE__TRAININGS__REMOVED = """Курс '{training_name}' успешно отвязан от роли."""
+
+ROLE__TRAININGS__ADDED = """Курс '{training_name}' успешно привязан к роли."""
+
+ROLE__ALL_TRAININGS = f"""Выбери курс, который хочешь добавить."""
+
+ROLE__ALL_TRAININGS__FULL = f"""Вы добавили все курсы. Вы можете создать новый.
+
+/{commands.TRAININGS.command} - {commands.TRAININGS.description}"""
+
+ROLE__ALL_TRAININGS__NOT_FOUND = f"""Курсов нет. Сначала добавьте их.
+
+/{commands.TRAININGS.command} - {commands.TRAININGS.description}"""
 

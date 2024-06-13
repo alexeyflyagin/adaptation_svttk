@@ -1,7 +1,7 @@
 from typing import Optional
 
-from data.asvttk_service.models import AccountOrm, RoleOrm, TrainingOrm
-from data.asvttk_service.types import AccountData, RoleData, TrainingData, EmployeeData, StudentData
+from data.asvttk_service.models import AccountOrm, RoleOrm, TrainingOrm, LevelOrm
+from data.asvttk_service.types import AccountData, RoleData, TrainingData, EmployeeData, StudentData, LevelData
 
 
 def account_orm_to_account_data(it: AccountOrm) -> AccountData:
@@ -48,7 +48,8 @@ def account_orm_to_student_data(it: AccountOrm, training: Optional[TrainingData]
     )
 
 
-def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[AccountData]]) -> TrainingData:
+def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[AccountData]],
+                                  levels: Optional[list[LevelData]]) -> TrainingData:
     return TrainingData(
         id=it.id,
         name=it.name,
@@ -59,6 +60,28 @@ def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[Accou
         date_start=it.date_start,
         date_end=it.date_end,
         students=students,
+        levels=levels,
+    )
+
+
+def level_orm_to_level_data(it: LevelOrm, training: Optional[TrainingData]) -> LevelData:
+    return LevelData(
+        id=it.id,
+        previous_level_id=it.previous_level_id,
+        next_level_id=it.next_level_id,
+        training_id=it.training_id,
+        type=it.type,
+        date_create=it.date_create,
+        title=it.title,
+        text=it.text,
+        html_text=it.html_text,
+        photo_ids=it.photo_ids,
+        video_ids=it.video_ids,
+        document_ids=it.document_ids,
+        options=it.options,
+        correct_option_ids=it.correct_option_ids,
+        quiz_comment=it.quiz_comment,
+        training=training,
     )
 
 
