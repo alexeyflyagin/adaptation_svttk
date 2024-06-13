@@ -28,10 +28,10 @@ def empty_check(it: Optional[str]):
 
 
 def initials_check(first_name: str, last_name: Optional[str], patronymic: Optional[str]):
-    if first_name and first_name.replace(" ", "") == "":
+    if first_name and first_name.replace(" ", "") == "" or not first_name:
         raise InitialsValueError("first_name is empty")
     if last_name and last_name.replace(" ", "") == "":
         raise InitialsValueError("last_name is empty")
-    if patronymic and last_name.replace(" ", "") == "":
+    if patronymic and patronymic.replace(" ", "") == "":
         raise InitialsValueError("patronymic is empty")
 

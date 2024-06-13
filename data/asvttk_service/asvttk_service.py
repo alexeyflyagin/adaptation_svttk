@@ -10,7 +10,7 @@ from typeguard import typechecked
 from data.asvttk_service import types
 from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
-    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError
+    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, InitialsValueError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
@@ -178,9 +178,7 @@ async def delete_employee(token: str, employee_id: int):
 
 
 @typechecked
-async def update_employee(token: str, employee_id: int, first_name: Optional[str] = None,
-                          last_name: Optional[str] = None, patronymic: Optional[str] = None,
-                          email: Optional[str] = None):
+async def update_email_employee(token: str, employee_id: int, email: Optional[str] = None):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
         if token_data.account.type != AccountType.ADMIN:
@@ -189,16 +187,29 @@ async def update_employee(token: str, employee_id: int, first_name: Optional[str
         account_orm = query.scalars().first()
         if not account_orm:
             raise NotFoundError
+        if email == '-':
+            email = None
         email_check(email)
+        account_orm.email = email
+        await s.commit()
+
+
+@typechecked
+async def update_full_name_employee(token: str, employee_id: int, first_name: Optional[str] = None,
+                                    last_name: Optional[str] = None, patronymic: Optional[str] = None):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        query = await s.execute(select(AccountOrm).filter(AccountOrm.id == employee_id))
+        account_orm = query.scalars().first()
+        if not account_orm:
+            raise NotFoundError
+        first_name, last_name, patronymic = (None if i == '-' else i for i in (first_name, last_name, patronymic))
         initials_check(first_name, last_name, patronymic)
-        if first_name:
-            account_orm.first_name = first_name
-        if last_name:
-            account_orm.last_name = last_name
-        if patronymic:
-            account_orm.patronymic = patronymic
-        if email:
-            account_orm.email = email
+        account_orm.first_name = first_name
+        account_orm.last_name = last_name
+        account_orm.patronymic = patronymic
         await s.commit()
 
 
@@ -308,7 +319,7 @@ async def get_all_roles(token: str, account_id: Optional[int] = None) -> list[Ro
                 raise ValueError("Only for employees")
             roles = [role_orm_to_role_data(i) for i in account.roles]
         else:
-            query = await s.execute(select(RoleOrm))
+            query = await s.execute(select(RoleOrm).order_by(RoleOrm.date_create))
             roles = [role_orm_to_role_data(i) for i in query.scalars().all()]
         return roles
 
@@ -475,6 +486,3 @@ async def delete_training(token: str, training_id: int):
         training = query.scalars().first()
         await s.delete(training)
         await s.commit()
-
-
-

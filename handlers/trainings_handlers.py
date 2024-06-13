@@ -143,8 +143,10 @@ async def create_training_name_handler(msg: Message, state: FSMContext):
 async def create_training_role_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     state_state = await state.get_state()
-    if state_state != TrainingCreateStates.ROLE:
+    if state_state not in TrainingCreateStates.__all_states_names__:
         await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.answer(strings.ACTION_CANCELED)
+        return
     try:
         state_data = await state.get_data()
         name = state_data.get("new_training_name")

@@ -283,8 +283,8 @@ async def show_edit_trainings(token: str, role_id: int, msg: Message, is_answer:
     try:
         role = await service.get_role_by_id(token, role_id)
         trainings = role.trainings
-        list_items = [ListItem(i.name, i.id) for i in trainings]
-        keyboard = list_keyboard(token, tag=TAG_ROLE_TRAININGS, pages=[list_items], max_btn_in_row=2,
+        list_items = [ListItem(cut_text(i.name), i.id) for i in trainings]
+        keyboard = list_keyboard(token, tag=TAG_ROLE_TRAININGS, pages=[list_items], max_btn_in_row=1,
                                  arg=role_id, back_btn_text=strings.BTN_BACK)
         text = strings.ROLE__TRAININGS.format(role_name=role.name)
         await show(msg, text, is_answer, keyboard=keyboard)
@@ -299,7 +299,7 @@ async def show_add_trainings(token: str, role_id: int, msg: Message, is_answer: 
         role = await service.get_role_by_id(token, role_id)
         exist_trainings_ids = [i.id for i in role.trainings]
         trainings = [i for i in all_trainings if i.id not in exist_trainings_ids]
-        list_items = [ListItem(cut_text(i.name, max_symbols=16), i.id) for i in trainings]
+        list_items = [ListItem(cut_text(i.name), i.id) for i in trainings]
         keyboard = list_keyboard(token, tag=TAG_ROLE_ADD_TRAININGS, pages=[list_items], max_btn_in_row=1,
                                  arg=role_id, add_btn_text=None, back_btn_text=strings.BTN_BACK)
         if trainings:

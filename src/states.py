@@ -15,6 +15,10 @@ class EmployeeEditEmailStates(StatesGroup):
     EditEmail = State()
 
 
+class EmployeeEditFullNameStates(StatesGroup):
+    EditFullName = State()
+
+
 class RoleCreateStates(StatesGroup):
     NAME = State()
 

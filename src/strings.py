@@ -18,6 +18,7 @@ BTN_DELETE_BACK = "« Назад"
 BTN_DELETE = "Удалить"
 BTN_TRAININGS = "Курсы"
 BTN_EDIT_EMAIL = "Изм. email"
+BTN_FULL_NAME = "Изм. ФИО"
 BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
 BTN_PIN = "Закрепить"
@@ -196,11 +197,18 @@ EMPLOYEE_INVITE = f"""Приглашаю вас в аккаунт сотрудн
 Присоединяйтесь, перейдя по ссылке: {{invite_link}}"""
 
 EMPLOYEE__EDIT_EMAIL = f"""Введите <b>email</b>.
-Пример: <code>ivanov_ivan66@email.ru</code>
+Пример: <code>ivanov_ivan66@email.ru</code> или <code>-</code>
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+EMPLOYEE__EDIT_FULL_NAME = f"""Введите новое <b>ФИО</b> сотрудника.
+Пример:  <code>Иванов Иван -</code>
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
 EMPLOYEE__EDIT_EMAIL__SUCCESS = f"""Email сотрудника успешно изменен!"""
+
+EMPLOYEE__FULL_NAME__SUCCESS = f"""ФИО сотрудника успешно изменен!"""
 
 EMPLOYEE__ROLES__REMOVED = """Роль '{role_name}' отвязана от аккаунта."""
 
