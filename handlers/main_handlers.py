@@ -11,7 +11,7 @@ from custom_storage import TOKEN
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
-    TrainingCreateStates, EmployeeEditFullNameStates
+    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates
 from src.utils import get_access_key_link
 
 router = Router()
@@ -77,6 +77,7 @@ async def log_in_data_callback(callback: CallbackQuery):
 @router.message(RoleCreateStates(), Command(commands.CANCEL))
 @router.message(RoleRenameStates(), Command(commands.CANCEL))
 @router.message(EmployeeEditEmailStates(), Command(commands.CANCEL))
+@router.message(TrainingEditNameStates(), Command(commands.CANCEL))
 @router.message(EmployeeEditFullNameStates(), Command(commands.CANCEL))
 @router.message(EmployeeCreateStates(), Command(commands.CANCEL))
 @router.message(TrainingCreateStates(), Command(commands.CANCEL))

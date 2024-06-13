@@ -56,7 +56,7 @@ def employee_keyboard(token: str, page_index: int, employee_id: Optional[int] = 
                                              action=EmployeeCD.Action.EDIT_FN)
         kbb.add(InlineKeyboardButton(text=strings.BTN_ROLES, callback_data=btn_roles_data.pack()))
         kbb.add(InlineKeyboardButton(text=strings.BTN_EDIT_EMAIL, callback_data=btn_edit_email_data.pack()))
-        kbb.add(InlineKeyboardButton(text=strings.BTN_FULL_NAME, callback_data=btn_edit_full_name_data.pack()))
+        kbb.add(InlineKeyboardButton(text=strings.BTN_EDIT_FULL_NAME, callback_data=btn_edit_full_name_data.pack()))
         kbb.add(InlineKeyboardButton(text=strings.BTN_DELETE, callback_data=btn_delete_data.pack()))
         adjust += [1, 2, 1]
     btn_back_data = EmployeeCD(token=token, page_index=page_index, action=EmployeeCD.Action.BACK)
@@ -245,7 +245,7 @@ async def add_roles_employee_callback(callback: CallbackQuery, state: FSMContext
 
 
 @router.message(EmployeeEditEmailStates.EditEmail)
-async def edit_email_employee_callback(msg: Message, state: FSMContext):
+async def edit_email_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
         state_data = await state.get_data()
@@ -265,7 +265,7 @@ async def edit_email_employee_callback(msg: Message, state: FSMContext):
 
 
 @router.message(EmployeeEditFullNameStates.EditFullName)
-async def edit_full_name_employee_callback(msg: Message, state: FSMContext):
+async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     if msg.content_type != ContentType.TEXT:
         await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)

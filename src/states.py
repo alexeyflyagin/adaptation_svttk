@@ -30,3 +30,7 @@ class RoleRenameStates(StatesGroup):
 class TrainingCreateStates(StatesGroup):
     NAME = State()
     ROLE = State()
+
+
+class TrainingEditNameStates(StatesGroup):
+    NAME = State()

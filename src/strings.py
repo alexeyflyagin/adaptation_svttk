@@ -18,7 +18,8 @@ BTN_DELETE_BACK = "« Назад"
 BTN_DELETE = "Удалить"
 BTN_TRAININGS = "Курсы"
 BTN_EDIT_EMAIL = "Изм. email"
-BTN_FULL_NAME = "Изм. ФИО"
+BTN_EDIT_NAME = "Изм. название"
+BTN_EDIT_FULL_NAME = "Изм. ФИО"
 BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
 BTN_PIN = "Закрепить"
@@ -273,6 +274,7 @@ TRAINING__NOT_FOUND = """Курс не найден."""
 
 TRAINING = """<code>{name}</code>
 Уровней:  <code>{level_counter}</code>
+
 Статус:  <i>{status}</i>
 Дата создания:  <code>{data_create}</code>
 Учеников:  <code>{students_counter}</code>"""
@@ -283,6 +285,17 @@ TRAINING__DELETE = f"""После подтверждения действия, �
 —
 Вы действительно хотите удалить курс
 <code>{{training_name}}</code>?"""
+
+TRAINING__EDIT_NAME = f"""Введите новое название для курса.
+(Рекомендуемая длинна: 2-3 слова)
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+TRAINING__EDIT_NAME__SUCCESS = f"""Название курса успешно изменено!"""
+
+TRAINING__EDIT_NAME__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат названия.
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
 ROLE__TRAININGS__REMOVED = """Курс '{training_name}' успешно отвязан от роли."""
 

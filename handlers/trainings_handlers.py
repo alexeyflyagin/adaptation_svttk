@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, Any
 
 from aiogram import Router, F
+from aiogram.enums import ContentType
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
@@ -15,7 +16,7 @@ from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, lis
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from data.asvttk_service import asvttk_service as service
 from src import commands, strings
-from src.states import MainStates, TrainingCreateStates
+from src.states import MainStates, TrainingCreateStates, TrainingEditNameStates
 from src.utils import show, cut_text, get_training_status
 
 router = Router()
@@ -34,16 +35,20 @@ class TrainingCD(CallbackData, prefix="training"):
     class Action:
         BACK = 0
         DELETE = 1
+        EDIT_NAME = 2
 
 
 def training_keyboard(token: str, page_index: int, training_id: Optional[int] = None):
     kbb = InlineKeyboardBuilder()
     adjust = []
     if training_id:
+        btn_edit_name_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
+                                        action=TrainingCD.Action.EDIT_NAME)
         btn_delete_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
                                      action=TrainingCD.Action.DELETE)
+        kbb.add(InlineKeyboardButton(text=strings.BTN_EDIT_NAME, callback_data=btn_edit_name_data.pack()))
         kbb.add(InlineKeyboardButton(text=strings.BTN_DELETE, callback_data=btn_delete_data.pack()))
-        adjust.append(1)
+        adjust += [1, 1]
     btn_back_data = TrainingCD(token=token, page_index=page_index, action=TrainingCD.Action.BACK)
     kbb.add(InlineKeyboardButton(text=strings.BTN_BACK, callback_data=btn_back_data.pack()))
     adjust.append(1)
@@ -88,13 +93,19 @@ async def trainings_callback(callback: CallbackQuery, state: FSMContext):
 async def training_callback(callback: CallbackQuery, state: FSMContext):
     data = TrainingCD.unpack(callback.data)
     try:
+        await state.update_data({"update_msg": None})
         if data.action == data.Action.BACK:
             await show_trainings(data.token, callback.message, data.page_index, is_answer=False)
-        if data.action == data.Action.DELETE:
+        elif data.action == data.Action.DELETE:
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__DELETE.format(training_name=training.name)
             await show_delete(data.token, callback.message, tag=TAG_TRAINING_DELETE, deleted_item_id=data.training_id,
                               args=data.page_index, is_answer=False, text=text)
+        elif data.action == data.Action.EDIT_NAME:
+            await state.set_state(TrainingEditNameStates.NAME)
+            await callback.message.answer(strings.TRAINING__EDIT_NAME)
+            await state.update_data({"updated_item_id": data.training_id})
+            await state.update_data({"update_msg": [callback.message.message_id, data.page_index]})
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
@@ -163,6 +174,28 @@ async def create_training_role_callback(callback: CallbackQuery, state: FSMConte
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback)
+
+
+@router.message(TrainingEditNameStates.NAME)
+async def edit_name_handler(msg: Message, state: FSMContext):
+    token = await get_token(state)
+    if msg.content_type != ContentType.TEXT:
+        await msg.answer(strings.TRAINING__EDIT_NAME__ERROR__INCORRECT_FORMAT)
+        return
+    try:
+        state_data = await state.get_data()
+        employee_id = state_data.get("updated_item_id")
+        update_msg = state_data.get("update_msg")
+        await service.update_name_training(token, employee_id, name=msg.text)
+        await msg.answer(strings.TRAINING__EDIT_NAME__SUCCESS)
+        if update_msg:
+            await show_training(token, employee_id, msg, update_msg[1], update_msg[0], is_answer=False)
+        await reset_state(state)
+    except NotFoundError:
+        await msg.answer(text=strings.TRAINING__NOT_FOUND)
+        await reset_state(state)
+    except TokenNotValidError:
+        await token_not_valid_error(msg, state)
 
 
 async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_msg_id: Optional[int] = None,

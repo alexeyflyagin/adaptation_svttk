@@ -486,3 +486,25 @@ async def delete_training(token: str, training_id: int):
         training = query.scalars().first()
         await s.delete(training)
         await s.commit()
+
+
+@typechecked
+async def update_name_training(token: str, training_id: int, name: Optional[str] = None):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type != AccountType.ADMIN:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.trainings))
+                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
+                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
+            roles = query.scalars().unique().all()
+            training_ids = list(itertools.chain(*[[n.id for n in i.trainings] for i in roles]))
+            if training_id not in training_ids:
+                raise AccessError()
+        query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
+        training = query.scalars().first()
+        if not training:
+            raise NotFoundError
+        training.name = name
+        await s.commit()
