@@ -86,7 +86,7 @@ class LevelData:
     previous_level_id: int
     next_level_id: int
     training_id: int
-    type: LevelType
+    type: str
     date_create: int
     title: str
     text: Optional[str]

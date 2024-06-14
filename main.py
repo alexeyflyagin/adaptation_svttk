@@ -19,7 +19,7 @@ async def main():
     bot = Bot(token=settings.BOT_TOKEN, default=bot_properties)
     storage = CustomStorage(ignore_users_id=[bot.id])
     dispatcher = Dispatcher(storage=storage)
-    WithoutCountCheckAlbumMiddleware(router=dispatcher)
+    WithoutCountCheckAlbumMiddleware(router=dispatcher, latency=0.5)
     dispatcher.include_router(main_handlers.router)
     try:
         await bot.set_my_commands(config.BOT_COMMANDS)

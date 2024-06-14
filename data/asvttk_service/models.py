@@ -14,9 +14,13 @@ class AccountType(Enum):
     STUDENT = 8
 
 
-class LevelType(Enum):
-    INFO = 0
-    QUIZ = 1
+class LevelType:
+    TEXT = "text"
+    PHOTO = "photo"
+    VIDEO = "video"
+    DOCUMENT = "document"
+    MEDIA_GROUP = "media_group"
+    QUIZ = "quiz"
 
 
 Base = declarative_base()
@@ -96,8 +100,8 @@ class TrainingOrm(Base):
     __tablename__ = "trainings"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
-    start_text: Mapped[str] = mapped_column(default="")
-    html_start_text: Mapped[str] = mapped_column(default="")
+    start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
+    html_start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
     photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     date_start: Mapped[Optional[int]] = mapped_column(nullable=True)
@@ -119,7 +123,7 @@ class LevelOrm(Base):
     next_level_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("levels.id", ondelete="SET NULL"), nullable=True)
     training_id: Mapped[int] = mapped_column(ForeignKey("trainings.id", ondelete="CASCADE"))
-    type: Mapped[LevelType] = mapped_column(sqlalchemy.Enum(LevelType))
+    type: Mapped[str]
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     title: Mapped[str]
     text: Mapped[Optional[str]] = mapped_column(nullable=True)

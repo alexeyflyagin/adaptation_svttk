@@ -14,7 +14,7 @@ from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidErr
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
-    TrainingAndRoleOrm, RoleAndAccountOrm
+    TrainingAndRoleOrm, RoleAndAccountOrm, LevelType, LevelOrm
 from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
     empty_check
@@ -46,6 +46,16 @@ async def __validate_by_token(s: AsyncSession, token: str) -> ValidateByTokenDat
     key: KeyOrm = await __get_first_where(s, KeyOrm, KeyOrm.id == session.key_id)
     account: AccountOrm = await __get_first_where(s, AccountOrm, AccountOrm.id == key.account_id)
     return ValidateByTokenData(session=session, key=key, account=account)
+
+
+async def __check_has_training(s: AsyncSession, training_id: int, employee_id: int):
+    query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.trainings))
+                            .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
+                            .filter(RoleAndAccountOrm.account_id == employee_id))
+    roles = query.scalars().unique().all()
+    training_ids = list(itertools.chain(*[[n.id for n in i.trainings] for i in roles]))
+    if training_id not in training_ids:
+        raise AccessError()
 
 
 @typechecked
@@ -450,16 +460,8 @@ async def get_all_trainings(token: str):
 async def get_training_by_id(token: str, training_id: int):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
-            raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
-            query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.trainings))
-                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
-                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
-            roles = query.scalars().unique().all()
-            training_ids = list(itertools.chain(*[[n.id for n in i.trainings] for i in roles]))
-            if training_id not in training_ids:
-                raise AccessError()
+            await __check_has_training(s, training_id, token_data.account.id)
         query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students))
                                 .options(joinedload(TrainingOrm.levels)).filter(TrainingOrm.id == training_id))
         training = query.scalars().first()
@@ -475,13 +477,7 @@ async def delete_training(token: str, training_id: int):
         if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
-            query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.trainings))
-                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
-                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
-            roles = query.scalars().unique().all()
-            training_ids = list(itertools.chain(*[[n.id for n in i.trainings] for i in roles]))
-            if training_id not in training_ids:
-                raise AccessError()
+            await __check_has_training(s, training_id, token_data.account.id)
         query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
         training = query.scalars().first()
         await s.delete(training)
@@ -492,19 +488,46 @@ async def delete_training(token: str, training_id: int):
 async def update_name_training(token: str, training_id: int, name: Optional[str] = None):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type != AccountType.ADMIN:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
-            query = await s.execute(select(RoleOrm).options(joinedload(RoleOrm.trainings))
-                                    .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
-                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
-            roles = query.scalars().unique().all()
-            training_ids = list(itertools.chain(*[[n.id for n in i.trainings] for i in roles]))
-            if training_id not in training_ids:
-                raise AccessError()
+            await __check_has_training(s, training_id, token_data.account.id)
         query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
         training = query.scalars().first()
         if not training:
             raise NotFoundError
         training.name = name
         await s.commit()
+
+
+# Levels
+@typechecked
+async def create_level(token: str, level_type: str, training_id: int, title: str, text: Optional[str] = None,
+                       html_text: Optional[str] = None, photo_ids: Optional[list[str]] = None,
+                       video_ids: Optional[list[str]] = None, document_ids: Optional[list[str]] = None,
+                       options: Optional[list[str]] = None, correct_option_ids: Optional[list[int]] = None,
+                       quiz_comment: Optional[str] = None):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        if title in ["", "-"]:
+            raise ValueError("The title should not be empty")
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id)
+                                .filter(LevelOrm.next_level_id is None))
+        last_level = query.scalars().first()
+        last_level_id = last_level.id if last_level else None
+        level = LevelOrm(previous_level_id=last_level_id, training_id=training_id, type=level_type,
+                         title=title, text=text, html_text=html_text, photo_ids=photo_ids, video_ids=video_ids,
+                         document_ids=document_ids, options=options, correct_option_ids=correct_option_ids,
+                         quiz_comment=quiz_comment)
+        s.add(level)
+        await s.flush()
+        if last_level:
+            last_level.next_level_id = level.id
+        await s.commit()
+
+
+

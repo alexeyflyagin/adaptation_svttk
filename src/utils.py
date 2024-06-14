@@ -7,6 +7,10 @@ from data.asvttk_service.types import AccountData, TrainingData
 from src import strings
 
 
+CONTENT_TYPE__MEDIA_GROUP = "media_group"
+TEMPORARY_MSGS = "temporary_msgs"
+
+
 def get_access_key_link(access_key: str):
     return f"https://t.me/superusername_bot?start={access_key}"
 
@@ -47,7 +51,7 @@ def get_training_status(training: TrainingData):
     return status
 
 
-async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, keyboard=None):
+async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, keyboard=None, is_delete: bool = True):
     try:
         if not is_answer and edited_msg_id:
             await msg.bot.edit_message_text(text=text, chat_id=msg.chat.id, message_id=edited_msg_id,
@@ -56,5 +60,7 @@ async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, key
             await msg.edit_text(text=text, reply_markup=keyboard)
         else:
             await msg.answer(text=text, reply_markup=keyboard)
+            if is_delete and edited_msg_id:
+                await msg.bot.delete_message(msg.chat.id, edited_msg_id)
     except TelegramBadRequest as _:
         pass

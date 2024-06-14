@@ -11,11 +11,13 @@ BTN_ADD = "+ Добавить"
 BTN_BACK = "« Назад"
 BTN_SAVE = "✓ Сохранить"
 BTN_SAVE_SYMBOL = "✓"
+BTN_ADD_SYMBOL = "+"
 BTN_DELETE_YES = "Да, всё верно!"
 BTN_DELETE_NO = "Нет"
 BTN_DELETE_NO_1 = "Отменить!"
 BTN_DELETE_BACK = "« Назад"
 BTN_DELETE = "Удалить"
+BTN_LEVELS = "Уровни"
 BTN_TRAININGS = "Курсы"
 BTN_EDIT_EMAIL = "Изм. email"
 BTN_EDIT_NAME = "Изм. название"
@@ -310,4 +312,41 @@ ROLE__ALL_TRAININGS__FULL = f"""Вы добавили все курсы. Вы м
 ROLE__ALL_TRAININGS__NOT_FOUND = f"""Курсов нет. Сначала добавьте их.
 
 /{commands.TRAININGS.command} - {commands.TRAININGS.description}"""
+
+TRAININGS__LEVELS__ITEM__TYPE__START = """👋"""
+TRAININGS__LEVELS__ITEM__TYPE__INFO = """ℹ️"""
+TRAININGS__LEVELS__ITEM__TYPE__QUIZ = """❓"""
+
+TRAININGS__LEVELS__ITEM = """{type_icon}  <b>{index}</b>  {level_title}"""
+
+TRAINING__LEVELS = f"""Список уровней курса '<code>{{training_name}}</code>'
+—
+{{items}}
+—
+Выберите уровень."""
+
+
+CREATE_LEVEL__TITLE = f"""Введите заголовок для нового уровня.
+(Рекомендуемая длинна: 2-3 слова)
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+CREATE_LEVEL__TITLE__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат заголовка. Попробуйте еще раз.
+(Рекомендуемая длинна: 2-3 слова)
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат контента. Попробуйте еще раз.
+Вы можете прислать текст (до 10 файлов или фотографий) или викторину.
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+CREATE_LEVEL__CONTENT = f"""Пришлите контент для уровня одним сообщением.
+Вы можете прислать текст или викторину.
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+
+CREATE_LEVEL__SUCCESS = f"""Новый уровень успешно создан!"""
+
 

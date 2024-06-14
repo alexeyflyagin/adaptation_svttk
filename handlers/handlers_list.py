@@ -27,10 +27,11 @@ class ListCD(CallbackData, prefix="list"):
         BACK = 5
 
 
-@dataclasses.dataclass
 class ListItem:
-    name: str
-    item_id: int
+    def __init__(self, name: str, item_id: int, obj: Optional[Any] = None):
+        self.name = name
+        self.item_id = item_id
+        self.obj = obj
 
 
 def __list_keyboard(token: str, tag: str, page_index: int, page_count: int, page_items: list[ListItem],
@@ -53,8 +54,7 @@ def __list_keyboard(token: str, tag: str, page_index: int, page_count: int, page
         adjust.append(3)
     for item in page_items:
         btn_select_item_data = ListCD(token=token, page_index=page_index, tag=tag, arg=arg, arg1=arg1,
-                                      action=ListCD.Action.SELECT,
-                                      selected_item_id=item.item_id)
+                                      action=ListCD.Action.SELECT, selected_item_id=item.item_id)
         kbb.add(InlineKeyboardButton(text=item.name, callback_data=btn_select_item_data.pack()))
     if page_items and not max_btn_in_row:
         adjust.append(len(page_items))
@@ -62,14 +62,17 @@ def __list_keyboard(token: str, tag: str, page_index: int, page_count: int, page
         if max_btn_in_row > len(page_items):
             adjust.append(len(page_items))
         else:
-            adjust.append(max_btn_in_row)
+            adjust += [max_btn_in_row] * (len(page_items) // max_btn_in_row)
+            if len(page_items) % max_btn_in_row != 0:
+                adjust += [len(page_items) % max_btn_in_row]
     if add_btn_text:
         btn_add_data = ListCD(token=token, page_index=page_index, tag=tag, arg=arg, arg1=arg1,
                               action=ListCD.Action.ADD)
         kbb.row(InlineKeyboardButton(text=add_btn_text, callback_data=btn_add_data.pack()))
         adjust.append(1)
     if back_btn_text:
-        btn_back_data = ListCD(token=token, page_index=page_index, tag=tag, arg=arg, arg1=arg1, action=ListCD.Action.BACK)
+        btn_back_data = ListCD(token=token, page_index=page_index, tag=tag, arg=arg, arg1=arg1,
+                               action=ListCD.Action.BACK)
         kbb.row(InlineKeyboardButton(text=back_btn_text, callback_data=btn_back_data.pack()))
         adjust.append(1)
     kbb.adjust(*adjust)

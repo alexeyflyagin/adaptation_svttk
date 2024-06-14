@@ -253,7 +253,8 @@ async def edit_email_employee_handler(msg: Message, state: FSMContext):
         update_msg = state_data.get("update_msg")
         await service.update_email_employee(token, employee_id, email=msg.text)
         await msg.answer(strings.EMPLOYEE__EDIT_EMAIL__SUCCESS)
-        await show_employee(token, employee_id, msg, update_msg[1], update_msg[0], is_answer=False)
+        if update_msg:
+            await show_employee(token, employee_id, msg, update_msg[1], update_msg[0], is_answer=False)
         await reset_state(state)
     except NotFoundError:
         await msg.answer(text=strings.EMPLOYEE__NOT_FOUND)
