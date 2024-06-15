@@ -8,7 +8,10 @@ from src import strings
 
 
 CONTENT_TYPE__MEDIA_GROUP = "media_group"
-TEMPORARY_MSGS = "temporary_msgs"
+START_SESSION_MSG_ID = "start_session_msg_id"
+UPDATED_MSG_ID = "updated_msg_id"
+UPDATED_MSG = "updated_msg"
+UPDATED_ITEM_ID = "updated_item_id"
 
 
 def get_access_key_link(access_key: str):
@@ -61,6 +64,6 @@ async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, key
         else:
             await msg.answer(text=text, reply_markup=keyboard)
             if is_delete and edited_msg_id:
-                await msg.bot.delete_message(msg.chat.id, edited_msg_id)
+                await msg.bot.edit_message_reply_markup(msg.chat.id, edited_msg_id, reply_markup=None)
     except TelegramBadRequest as _:
         pass

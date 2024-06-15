@@ -19,10 +19,11 @@ from handlers.handlers_utils import get_token, token_not_valid_error, token_not_
 from src import commands, strings
 from src.states import MainStates, RoleCreateStates, RoleRenameStates
 from src.strings import code
-from src.utils import get_full_name, show, cut_text
+from src.utils import get_full_name, show, cut_text, UPDATED_MSG_ID, UPDATED_ITEM_ID
 
 router = Router()
 
+TAG_DELETE_ROLE = "role_del"
 TAG_ROLE_TRAININGS = "role_trains"
 TAG_ROLE_ADD_TRAININGS = "role_add_trains"
 
@@ -77,11 +78,11 @@ async def roles_callback(callback: CallbackQuery, state: FSMContext):
         if data.is_create:
             await service.token_validate(data.token)
             await state.set_state(RoleCreateStates.NAME)
-            await state.update_data({"updated_msg_id": callback.message.message_id})
+            await state.update_data({UPDATED_MSG_ID: callback.message.message_id})
             await callback.message.answer(strings.CREATE_ROLE__ENTER_NAME)
         else:
-            await show_role(data.token, data.role_id, callback.message)
-            await state.update_data({"updated_msg_id": None})
+            await show_role(data.token, data.role_id, callback.message, is_answer=False)
+            await state.update_data({UPDATED_MSG_ID: None})
         await callback.answer()
     except NotFoundError:
         await show_role(data.token, data.role_id, callback.message, is_answer=False)
@@ -96,18 +97,18 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
     try:
         if data.action == data.Action.BACK:
             await show_roles(data.token, callback.message, is_answer=False)
-            await state.update_data({"updated_msg_id": None})
+            await state.update_data({UPDATED_MSG_ID: None})
         elif data.action == data.Action.DELETE:
             role = await service.get_role_by_id(data.token, data.role_id)
             text = strings.ROLE_DELETE.format(role_name=role.name)
-            await show_delete(data.token, callback.message, deleted_item_id=data.role_id, text=text, tag="role",
+            await show_delete(data.token, callback.message, deleted_item_id=data.role_id, text=text, tag=TAG_DELETE_ROLE,
                               is_answer=False)
-            await state.update_data({"updated_msg_id": None})
+            await state.update_data({UPDATED_MSG_ID: None})
         elif data.action == data.Action.RENAME:
             role = await service.get_role_by_id(data.token, data.role_id)
             await state.set_state(RoleRenameStates.RENAME)
-            await state.update_data({"updated_item_id": role.id})
-            await state.update_data({"updated_msg_id": callback.message.message_id})
+            await state.update_data({UPDATED_ITEM_ID: role.id})
+            await state.update_data({UPDATED_MSG_ID: callback.message.message_id})
             await callback.message.answer(strings.ROLE__RENAME.format(role_name=role.name))
         elif data.action == data.Action.TRAININGS:
             await show_edit_trainings(data.token, data.role_id, callback.message, is_answer=False)
@@ -163,7 +164,7 @@ async def add_trainings_employee_callback(callback: CallbackQuery):
         await token_not_valid_error_for_callback(callback)
 
 
-@router.callback_query(DeleteItemCD.filter(F.tag == 'role'))
+@router.callback_query(DeleteItemCD.filter(F.tag == TAG_DELETE_ROLE))
 async def delete_role_callback(callback: CallbackQuery):
     data = DeleteItemCD.unpack(callback.data)
     try:
@@ -191,9 +192,9 @@ async def create_role_name_handler(msg: Message, state: FSMContext):
     try:
         role = await service.create_role(token, name=msg.text)
         await msg.answer(strings.CREATE_ROLE__SUCCESS.format(role_name=role.name))
-        updated_msg_id: Optional[int] = (await state.get_data()).get("updated_msg_id", None)
+        updated_msg_id: Optional[int] = (await state.get_data()).get(UPDATED_MSG_ID, None)
         if updated_msg_id:
-            await show_roles(token, msg, edited_msg_id=updated_msg_id, is_answer=False)
+            await show_roles(token, msg, edited_msg_id=updated_msg_id)
         await reset_state(state)
     except ValueError:
         await msg.answer(strings.CREATE_ROLE__ENTER_NAME__TOO_LONGER_ERROR)
@@ -207,12 +208,12 @@ async def create_role_name_handler(msg: Message, state: FSMContext):
 async def rename_role_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
-        role_id = (await state.get_data()).get("updated_item_id")
+        role_id = (await state.get_data()).get(UPDATED_ITEM_ID)
         await service.update_role(token, role_id=role_id, name=msg.text)
         await msg.answer(strings.ROLE__RENAME__SUCCESS)
-        updated_msg_id: Optional[int] = (await state.get_data()).get("updated_msg_id", None)
+        updated_msg_id: Optional[int] = (await state.get_data()).get(UPDATED_MSG_ID, None)
         if updated_msg_id:
-            await show_role(token, role_id, msg, edited_msg_id=updated_msg_id, is_answer=False)
+            await show_role(token, role_id, msg, edited_msg_id=updated_msg_id)
         await reset_state(state)
     except ValueError:
         await msg.answer(strings.CREATE_ROLE__ENTER_NAME__TOO_LONGER_ERROR)
@@ -239,19 +240,13 @@ async def show_roles(token: str, msg: Message, edited_msg_id: Optional[int] = No
         roles = await service.get_all_roles(token)
         text = strings.ROLES if roles else strings.ROLES__EMPTY
         keyboard = roles_keyboard(token, roles)
-        if not is_answer and edited_msg_id:
-            await msg.bot.edit_message_text(text=text, chat_id=msg.chat.id, message_id=edited_msg_id,
-                                            reply_markup=keyboard)
-        elif not is_answer and not edited_msg_id:
-            await msg.edit_text(text=text, reply_markup=keyboard)
-        else:
-            await msg.answer(text=text, reply_markup=keyboard)
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
     except TelegramBadRequest:
         pass
 
 
 async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id: Optional[int] = None,
-                    is_answer: bool = False):
+                    is_answer: bool = True):
     keyboard = role_keyboard(token)
     text = strings.ROLE__NOT_FOUND
     try:
@@ -265,16 +260,7 @@ async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id
         text = strings.ROLE.format(role_name=role.name, date_create=date_create, employees_list=employees_list,
                                    trainings_list=trainings_list)
         keyboard = role_keyboard(token, role_id=role_id)
-        if not is_answer and edited_msg_id:
-            try:
-                await msg.bot.edit_message_text(text=text, chat_id=msg.chat.id, message_id=edited_msg_id,
-                                                reply_markup=keyboard)
-            except TelegramBadRequest:
-                pass
-        elif not is_answer and not edited_msg_id:
-            await msg.edit_text(text=text, reply_markup=keyboard)
-        else:
-            await msg.answer(text=text, reply_markup=keyboard)
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
     except NotFoundError:
         await msg.edit_text(text=text, reply_markup=keyboard)
 

@@ -9,13 +9,18 @@ def code(it: str):
 BTN_CREATE = "+ Создать"
 BTN_ADD = "+ Добавить"
 BTN_BACK = "« Назад"
+BTN_EDIT = "Изменить"
 BTN_SAVE = "✓ Сохранить"
+BTN_CLOSE = "X  Сохранить"
 BTN_SAVE_SYMBOL = "✓"
 BTN_ADD_SYMBOL = "+"
 BTN_DELETE_YES = "Да, всё верно!"
 BTN_DELETE_NO = "Нет"
 BTN_DELETE_NO_1 = "Отменить!"
 BTN_DELETE_BACK = "« Назад"
+BTN_PREVIOUS_SYMBOL = "«"
+BTN_NEXT_SYMBOL = "»"
+BTN_SHOW = "Показать"
 BTN_DELETE = "Удалить"
 BTN_LEVELS = "Уровни"
 BTN_TRAININGS = "Курсы"
@@ -38,12 +43,10 @@ SESSION_ERROR = f"""Ошибка! Истек срок сессии."""
 
 ACTION_CANCELED = f"""Действие отменено."""
 
+CLEAR_PREVIOUS_SESSION = f"""🔴 Дождитесь завершение предыдущей сессии."""
 
 # LogIn
-LOG_IN__SUCCESS = f"""Вы успешно вошли в аккаунт! 
-Добрый день, <code>{{first_name}}</code>. 
-
-/{commands.HELP.command} - {commands.HELP.description}"""
+LOG_IN__SUCCESS = f"""👋  Добрый день, <code>{{first_name}}</code>."""
 
 LOG_IN__SUCCESS__FIRST = f"""Вы зашли в аккаунт впервые. В целях безопасности был присвоен новый ключ доступа.
 Ключ доступа:  <tg-spoiler>{{access_key}}</tg-spoiler>
@@ -121,6 +124,7 @@ CREATE_ROLE__SUCCESS = f"""Новая роль с именем '<code>{{role_nam
 
 ROLE__RENAME = f"""Введите новое название для роли '<code>{{role_name}}</code>'.
 <i>(Максимум 15 символов)</i>
+
 /{commands.ROLES.command} - {commands.ROLES.description}"""
 
 ROLE__RENAME__SUCCESS = f"""Название роли успешно сменено!"""
@@ -318,6 +322,7 @@ TRAININGS__LEVELS__ITEM__TYPE__INFO = """ℹ️"""
 TRAININGS__LEVELS__ITEM__TYPE__QUIZ = """❓"""
 
 TRAININGS__LEVELS__ITEM = """{type_icon}  <b>{index}</b>  {level_title}"""
+TRAININGS__LEVELS__ITEM__NO_INDEX = """{type_icon}  {level_title}"""
 
 TRAINING__LEVELS = f"""Список уровней курса '<code>{{training_name}}</code>'
 —
@@ -348,5 +353,34 @@ CREATE_LEVEL__CONTENT = f"""Пришлите контент для уровня 
 
 
 CREATE_LEVEL__SUCCESS = f"""Новый уровень успешно создан!"""
+
+LEVEL__NOT_FOUND = f"""Уровень не найден."""
+
+LEVEL = f"""<b>{{index}}</b>  <code>{{level_name}}</code>
+Курс:  <code>{{training_name}}</code>
+Тип уровня:  <code>{{level_type}}</code>
+📎:  <code>{{attached_counter}}</code>
+—
+<blockquote expandable>{{text}}</blockquote>"""
+
+
+LEVEL__START = f"""{TRAININGS__LEVELS__ITEM__TYPE__START}  Начальное сообщение
+Курс:  <code>{{training_name}}</code>
+
+Сообщение будет показано в самом начале обучения. Поприветствуйте ученика и расскажите ему про данный курс.
+—
+<blockquote expandable>{{text}}</blockquote>"""
+
+
+LEVEL__DELETE = f"""После подтверждения действия, уровень будет навсегда удален!
+—
+Вы действительно хотите удалить уровень
+<code>{{level_name}}</code> из курса <code>{{training_name}}</code>?"""
+
+LEVEL__DELETED = f"""✅  Уровень '{{level_name}}' успешно удален!"""
+
+LEVEL__NO_TEXT = "<i>(Текст отсутствует)</i>"
+
+LEVEL__START_TEXT_DEFAULT = """Добро пожаловать на курс."""
 
 

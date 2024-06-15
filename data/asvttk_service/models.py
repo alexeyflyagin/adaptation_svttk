@@ -96,25 +96,6 @@ class TrainingAndRoleOrm(Base):
     date_create: Mapped[int] = mapped_column(default=get_current_time)
 
 
-class TrainingOrm(Base):
-    __tablename__ = "trainings"
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str]
-    start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
-    html_start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
-    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
-    date_create: Mapped[int] = mapped_column(default=get_current_time)
-    date_start: Mapped[Optional[int]] = mapped_column(nullable=True)
-    date_end: Mapped[Optional[int]] = mapped_column(nullable=True)
-
-    students = relationship("AccountOrm", back_populates="training")
-    roles = relationship(
-        "RoleOrm", secondary="training_and_roles", secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
-        primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings"
-    )
-    levels = relationship("LevelOrm", back_populates="training")
-
-
 class LevelOrm(Base):
     __tablename__ = "levels"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -146,3 +127,23 @@ class LevelAnswerOrm(Base):
     level_id: Mapped[int] = mapped_column(ForeignKey("levels.id", ondelete="CASCADE"))
     answer_option_ids: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
     is_correct: Mapped[Optional[bool]] = mapped_column(nullable=True)
+
+
+class TrainingOrm(Base):
+    __tablename__ = "trainings"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str]
+    start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
+    html_start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
+    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    date_create: Mapped[int] = mapped_column(default=get_current_time)
+    date_start: Mapped[Optional[int]] = mapped_column(nullable=True)
+    date_end: Mapped[Optional[int]] = mapped_column(nullable=True)
+
+    students = relationship("AccountOrm", back_populates="training", cascade="all, delete")
+    roles = relationship(
+        "RoleOrm", secondary="training_and_roles", secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
+        primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings",
+        cascade="all, delete"
+    )
+    levels = relationship("LevelOrm", back_populates="training", cascade="all, delete")

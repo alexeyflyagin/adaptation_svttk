@@ -19,7 +19,7 @@ from handlers.handlers_utils import get_token, token_not_valid_error, token_not_
 from src import commands, strings
 from src.states import MainStates, EmployeeCreateStates, EmployeeEditEmailStates, EmployeeEditFullNameStates
 from src.strings import code
-from src.utils import get_full_name_by_account, get_access_key_link, show
+from src.utils import get_full_name_by_account, get_access_key_link, show, UPDATED_MSG, UPDATED_ITEM_ID
 
 router = Router()
 
@@ -88,11 +88,11 @@ async def list_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
-        await state.update_data({"updated_msg": None})
+        await state.update_data({UPDATED_MSG: None})
         if data.action == data.Action.ADD:
             await state.set_state(EmployeeCreateStates.FULL_NAME)
             await callback.message.answer(strings.CREATE_EMPLOYEE)
-            await state.update_data({"updated_msg": [callback.message.message_id, data.page_index]})
+            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         elif data.action == data.Action.COUNTER:
             await show_employees(data.token, callback.message, page_index=data.page_index, is_answer=False)
         elif data.action == data.Action.SELECT:
@@ -129,9 +129,9 @@ async def create_employee_handler(msg: Message, state: FSMContext):
         await msg.answer(strings.CREATE_EMPLOYEE__SUCCESS.format(
             access_key=acc_data.access_key,
             access_link=get_access_key_link(acc_data.access_key)), reply_markup=keyboard)
-        updated_msg: Optional[list] = (await state.get_data()).get("updated_msg", None)
+        updated_msg: Optional[list] = (await state.get_data()).get(UPDATED_MSG, None)
         if updated_msg:
-            await show_employees(token, msg, edited_msg_id=updated_msg[0], page_index=updated_msg[1], is_answer=False)
+            await show_employees(token, msg, edited_msg_id=updated_msg[0], page_index=updated_msg[1])
         await reset_state(state)
     except InitialsValueError:
         await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)
@@ -144,14 +144,14 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
     data = EmployeeCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
-        await state.update_data({"update_msg": None})
+        await state.update_data({UPDATED_MSG: None})
         if data.action == data.Action.BACK:
             await show_employees(data.token, callback.message, page_index=data.page_index, is_answer=False)
         if data.action == data.Action.EDIT_EMAIL:
             await state.set_state(EmployeeEditEmailStates.EditEmail)
             await callback.message.answer(strings.EMPLOYEE__EDIT_EMAIL)
-            await state.update_data({"updated_item_id": data.employee_id})
-            await state.update_data({"update_msg": [callback.message.message_id, data.page_index]})
+            await state.update_data({UPDATED_ITEM_ID: data.employee_id})
+            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         elif data.action == data.Action.DELETE:
             employee = await service.get_employee_by_id(data.token, data.employee_id)
             text = strings.EMPLOYEE_DELETE.format(full_name=get_full_name_by_account(employee, full_patronymic=True))
@@ -162,8 +162,8 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.EDIT_FN:
             await state.set_state(EmployeeEditFullNameStates.EditFullName)
             await callback.message.answer(strings.EMPLOYEE__EDIT_FULL_NAME)
-            await state.update_data({"updated_item_id": data.employee_id})
-            await state.update_data({"update_msg": [callback.message.message_id, data.page_index]})
+            await state.update_data({UPDATED_ITEM_ID: data.employee_id})
+            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         await callback.answer()
     except NotFoundError:
         await show_employee(data.token, data.employee_id, callback.message, page_index=data.page_index, is_answer=False)
@@ -228,10 +228,10 @@ async def add_roles_employee_callback(callback: CallbackQuery, state: FSMContext
             role = await service.get_role_by_id(data.token, role_id=data.selected_item_id)
             await service.add_role_to_employee(data.token, employee_id=employee_id, role_id=role.id)
             state_data = await state.get_data()
-            update_msg = state_data.get("update_msg")
+            update_msg = state_data.get(UPDATED_MSG)
             if update_msg:
                 await show_employee(data.token, employee_id, callback.message, update_msg[1],
-                                    edited_msg_id=update_msg[0], is_answer=False)
+                                    edited_msg_id=update_msg[0])
             await callback.answer(strings.EMPLOYEE__ROLES__ADDED.format(role_name=role.name))
             await show_edit_roles(data.token, employee_id, callback.message, is_answer=False)
         elif data.action == data.Action.BACK:
@@ -249,12 +249,12 @@ async def edit_email_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
         state_data = await state.get_data()
-        employee_id = state_data.get("updated_item_id")
-        update_msg = state_data.get("update_msg")
+        employee_id = state_data.get(UPDATED_ITEM_ID)
+        update_msg = state_data.get(UPDATED_MSG)
         await service.update_email_employee(token, employee_id, email=msg.text)
         await msg.answer(strings.EMPLOYEE__EDIT_EMAIL__SUCCESS)
         if update_msg:
-            await show_employee(token, employee_id, msg, update_msg[1], update_msg[0], is_answer=False)
+            await show_employee(token, employee_id, msg, update_msg[1], update_msg[0])
         await reset_state(state)
     except NotFoundError:
         await msg.answer(text=strings.EMPLOYEE__NOT_FOUND)
@@ -274,13 +274,13 @@ async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
     try:
         initials = get_initials_from_text(msg.text)
         state_data = await state.get_data()
-        employee_id = state_data.get("updated_item_id")
-        update_msg = state_data.get("update_msg")
+        employee_id = state_data.get(UPDATED_ITEM_ID)
+        update_msg = state_data.get(UPDATED_MSG)
         await service.update_full_name_employee(token, employee_id, first_name=initials[1], last_name=initials[0],
                                                 patronymic=initials[2])
         await msg.answer(strings.EMPLOYEE__FULL_NAME__SUCCESS)
         if update_msg:
-            await show_employee(token, employee_id, msg, update_msg[1], update_msg[0], is_answer=False)
+            await show_employee(token, employee_id, msg, update_msg[1], update_msg[0])
         await reset_state(state)
     except InitialsValueError:
         await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)

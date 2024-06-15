@@ -8,16 +8,17 @@ from sqlalchemy.orm import joinedload
 from typeguard import typechecked
 
 from data.asvttk_service import types
-from data.asvttk_service.database import database
+from data.asvttk_service.database import database, is_foreign_key
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
     KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, InitialsValueError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
     TrainingAndRoleOrm, RoleAndAccountOrm, LevelType, LevelOrm
-from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData
+from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
     empty_check
+from src import strings
 
 
 class ValidateByTokenData:
@@ -414,9 +415,12 @@ async def create_training(token: str, name: str, start_text: Optional[str] = Non
         new_training = TrainingOrm(name=name)
         if bool(start_text) != bool(html_start_text):
             raise ValueError("The start_text has a value, but html_start_text does not, or vice versa")
-        elif start_text:
+        elif start_text and html_start_text:
             new_training.start_text = start_text
             new_training.html_start_text = html_start_text
+        else:
+            new_training.start_text = strings.LEVEL__START_TEXT_DEFAULT
+            new_training.html_start_text = strings.LEVEL__START_TEXT_DEFAULT
         s.add(new_training)
         await s.flush()
         training_data = training_orm_to_training_data(new_training, None, None)
@@ -465,6 +469,8 @@ async def get_training_by_id(token: str, training_id: int):
         query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students))
                                 .options(joinedload(TrainingOrm.levels)).filter(TrainingOrm.id == training_id))
         training = query.scalars().first()
+        if not training:
+            raise NotFoundError()
         students = [account_orm_to_student_data(i, None) for i in training.students]
         levels = [level_orm_to_level_data(i, None) for i in training.levels]
         return training_orm_to_training_data(training, students, levels)
@@ -480,6 +486,8 @@ async def delete_training(token: str, training_id: int):
             await __check_has_training(s, training_id, token_data.account.id)
         query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
         training = query.scalars().first()
+        if not training:
+            return NotFoundError()
         await s.delete(training)
         await s.commit()
 
@@ -515,8 +523,8 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
             await __check_has_training(s, training_id, token_data.account.id)
         if title in ["", "-"]:
             raise ValueError("The title should not be empty")
-        query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id)
-                                .filter(LevelOrm.next_level_id is None))
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id,
+                                                        LevelOrm.next_level_id == None))
         last_level = query.scalars().first()
         last_level_id = last_level.id if last_level else None
         level = LevelOrm(previous_level_id=last_level_id, training_id=training_id, type=level_type,
@@ -528,6 +536,78 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
         if last_level:
             last_level.next_level_id = level.id
         await s.commit()
+
+
+@typechecked
+async def delete_level_by_id(token: str, level_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level_id))
+        level = query.scalars().first()
+        if not level:
+            raise NotFoundError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, level.training_id, token_data.account.id)
+        if level.next_level_id:
+            query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level.next_level_id))
+            next_level = query.scalars().first()
+            next_level.previous_level_id = level.previous_level_id
+        if level.previous_level_id:
+            query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level.previous_level_id))
+            previous_level = query.scalars().first()
+            previous_level.next_level_id = level.next_level_id
+        await s.delete(level)
+        await s.commit()
+
+
+@typechecked
+async def get_levels_by_training(token: str, training_id: int) -> list[LevelData]:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
+                                .filter(LevelOrm.training_id == training_id))
+        levels = query.scalars().unique().all()
+
+        first_level = next((lvl for lvl in levels if lvl.previous_level_id is None), None)
+
+        if first_level is None:
+            return []
+
+        levels_sorted = []
+        current_level = first_level
+
+        while current_level is not None:
+            levels_sorted.append(current_level)
+            current_level = next((lvl for lvl in levels if lvl.id == current_level.next_level_id), None)
+
+        levels_data = []
+        for i in levels_sorted:
+            training_data = training_orm_to_training_data(i.training, None, None)
+            levels_data.append(level_orm_to_level_data(i, training_data))
+        return levels_data
+
+
+@typechecked
+async def get_level_by_id(token: str, level_id: int) -> LevelData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
+                                .filter(LevelOrm.id == level_id))
+        level = query.scalars().unique().first()
+        if not level:
+            raise NotFoundError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, level.training_id, token_data.account.id)
+        training_data = training_orm_to_training_data(level.training, None, None)
+        return level_orm_to_level_data(level, training_data)
 
 
 

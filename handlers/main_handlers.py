@@ -1,4 +1,7 @@
+import asyncio
+
 from aiogram import Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandObject, Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
@@ -6,14 +9,15 @@ from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from handlers import admin_roles_handlers, handlers_utils, last_handlers, admin_employees_handlers, trainings_handlers
-from handlers.handlers_utils import reset_state, add_temporary_msg_id
+from handlers.handlers_utils import reset_state
+from handlers.last_handlers import help_handler
 from src import strings, commands
 from custom_storage import TOKEN
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
-    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates
-from src.utils import get_access_key_link
+    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, MainStates
+from src.utils import get_access_key_link, START_SESSION_MSG_ID
 
 router = Router()
 router.include_routers(trainings_handlers.router)
@@ -52,14 +56,32 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
     try:
         log_in_data = await service.log_in(user_id, key=command.args)
         account = await service.get_account_by_id(log_in_data.token)
-        await state.update_data({TOKEN: log_in_data.token})
-        await handlers_utils.reset_state(state)
+        state_data = await state.get_data()
+        start_session_msg_id = state_data.get(START_SESSION_MSG_ID, None)
+        await state.set_data({TOKEN: log_in_data.token, START_SESSION_MSG_ID: msg.message_id})
+
+        async def delete_msg(chat_id: int, msg_id: int):
+            try:
+                await msg.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            except TelegramBadRequest as _:
+                pass
+
+        if start_session_msg_id:
+            wait_msg = await msg.answer(strings.CLEAR_PREVIOUS_SESSION)
+            await state.set_state(MainStates.CLEAR_PREVIOUS_SESSION)
+            all_msg_ids = list(range(start_session_msg_id, msg.message_id))[::-1]
+            for i in range(0, len(all_msg_ids), 5):
+                tasks = [delete_msg(msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
+                await asyncio.gather(*tasks)
+            await wait_msg.delete()
         await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
+        await reset_state(state)
         if log_in_data.is_first:
             text = strings.LOG_IN__SUCCESS__FIRST.format(first_name=account.first_name,
                                                          access_key=log_in_data.access_key)
             keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)
             await msg.answer(text, reply_markup=keyboard)
+        await help_handler(msg, state)
     except KeyNotFoundError:
         await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
 
@@ -84,5 +106,5 @@ async def log_in_data_callback(callback: CallbackQuery):
 @router.message(TrainingCreateStates(), Command(commands.CANCEL))
 @router.message(LevelCreateStates(), Command(commands.CANCEL))
 async def cancel_handler(msg: Message, state: FSMContext):
-    await add_temporary_msg_id(state, msg)
-    await reset_state(state, msg)
+    await reset_state(state)
+    await msg.answer(strings.ACTION_CANCELED)
