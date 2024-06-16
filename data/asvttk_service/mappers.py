@@ -64,9 +64,10 @@ def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[Accou
     )
 
 
-def level_orm_to_level_data(it: LevelOrm, training: Optional[TrainingData]) -> LevelData:
+def level_orm_to_level_data(it: LevelOrm, order: Optional[int], training: Optional[TrainingData]) -> LevelData:
     return LevelData(
         id=it.id,
+        order=order,
         previous_level_id=it.previous_level_id,
         next_level_id=it.next_level_id,
         training_id=it.training_id,
@@ -75,9 +76,7 @@ def level_orm_to_level_data(it: LevelOrm, training: Optional[TrainingData]) -> L
         title=it.title,
         text=it.text,
         html_text=it.html_text,
-        photo_ids=it.photo_ids,
-        video_ids=it.video_ids,
-        document_ids=it.document_ids,
+        files=it.files,
         options=it.options,
         correct_option_ids=it.correct_option_ids,
         quiz_comment=it.quiz_comment,

@@ -8,13 +8,13 @@ from sqlalchemy.orm import joinedload
 from typeguard import typechecked
 
 from data.asvttk_service import types
-from data.asvttk_service.database import database, is_foreign_key
+from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
-    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, InitialsValueError
+    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
-    TrainingAndRoleOrm, RoleAndAccountOrm, LevelType, LevelOrm
+    TrainingAndRoleOrm, RoleAndAccountOrm, LevelOrm
 from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
     empty_check
@@ -136,7 +136,9 @@ async def get_all_employees(token: str) -> list[EmployeeData]:
 async def get_employee_by_id(token: str, employee_id: int) -> EmployeeData:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type != AccountType.ADMIN:
+        if token_data.account.type is [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError
+        if token_data.account.type == AccountType.EMPLOYEE and token_data.account.id != employee_id:
             raise AccessError
         query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
                                 .filter(AccountOrm.type == AccountType.EMPLOYEE, AccountOrm.id == employee_id))
@@ -472,7 +474,7 @@ async def get_training_by_id(token: str, training_id: int):
         if not training:
             raise NotFoundError()
         students = [account_orm_to_student_data(i, None) for i in training.students]
-        levels = [level_orm_to_level_data(i, None) for i in training.levels]
+        levels = [level_orm_to_level_data(i, None,None) for i in training.levels]
         return training_orm_to_training_data(training, students, levels)
 
 
@@ -511,8 +513,7 @@ async def update_name_training(token: str, training_id: int, name: Optional[str]
 # Levels
 @typechecked
 async def create_level(token: str, level_type: str, training_id: int, title: str, text: Optional[str] = None,
-                       html_text: Optional[str] = None, photo_ids: Optional[list[str]] = None,
-                       video_ids: Optional[list[str]] = None, document_ids: Optional[list[str]] = None,
+                       html_text: Optional[str] = None, files: dict[str, str] = None,
                        options: Optional[list[str]] = None, correct_option_ids: Optional[list[int]] = None,
                        quiz_comment: Optional[str] = None):
     async with database.session_factory() as s:
@@ -523,14 +524,15 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
             await __check_has_training(s, training_id, token_data.account.id)
         if title in ["", "-"]:
             raise ValueError("The title should not be empty")
+        if not files:
+            files = {}
         query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id,
                                                         LevelOrm.next_level_id == None))
         last_level = query.scalars().first()
         last_level_id = last_level.id if last_level else None
         level = LevelOrm(previous_level_id=last_level_id, training_id=training_id, type=level_type,
-                         title=title, text=text, html_text=html_text, photo_ids=photo_ids, video_ids=video_ids,
-                         document_ids=document_ids, options=options, correct_option_ids=correct_option_ids,
-                         quiz_comment=quiz_comment)
+                         title=title, text=text, html_text=html_text, files=files, options=options,
+                         correct_option_ids=correct_option_ids, quiz_comment=quiz_comment)
         s.add(level)
         await s.flush()
         if last_level:
@@ -562,6 +564,21 @@ async def delete_level_by_id(token: str, level_id: int):
         await s.commit()
 
 
+async def __get_levels_sorted(s: AsyncSession, training_id: int):
+    query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
+                            .filter(LevelOrm.training_id == training_id))
+    levels = query.scalars().unique().all()
+    first_level = next((lvl for lvl in levels if lvl.previous_level_id is None), None)
+    if first_level is None:
+        return []
+    levels_sorted = []
+    current_level = first_level
+    while current_level is not None:
+        levels_sorted.append(current_level)
+        current_level = next((lvl for lvl in levels if lvl.id == current_level.next_level_id), None)
+    return levels_sorted
+
+
 @typechecked
 async def get_levels_by_training(token: str, training_id: int) -> list[LevelData]:
     async with database.session_factory() as s:
@@ -570,26 +587,11 @@ async def get_levels_by_training(token: str, training_id: int) -> list[LevelData
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
-        query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
-                                .filter(LevelOrm.training_id == training_id))
-        levels = query.scalars().unique().all()
-
-        first_level = next((lvl for lvl in levels if lvl.previous_level_id is None), None)
-
-        if first_level is None:
-            return []
-
-        levels_sorted = []
-        current_level = first_level
-
-        while current_level is not None:
-            levels_sorted.append(current_level)
-            current_level = next((lvl for lvl in levels if lvl.id == current_level.next_level_id), None)
-
+        levels = await __get_levels_sorted(s, training_id)
         levels_data = []
-        for i in levels_sorted:
+        for i in levels:
             training_data = training_orm_to_training_data(i.training, None, None)
-            levels_data.append(level_orm_to_level_data(i, training_data))
+            levels_data.append(level_orm_to_level_data(i, levels.index(i) + 1, training_data))
         return levels_data
 
 
@@ -604,10 +606,23 @@ async def get_level_by_id(token: str, level_id: int) -> LevelData:
         level = query.scalars().unique().first()
         if not level:
             raise NotFoundError()
+        levels = await __get_levels_sorted(s, level.training_id)
+        index = next((i for i in range(len(levels)) if levels[i].id == level_id), None)
+        if index is None:
+            raise ValueError
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
         training_data = training_orm_to_training_data(level.training, None, None)
-        return level_orm_to_level_data(level, training_data)
+        return level_orm_to_level_data(level, index + 1, training_data)
 
 
-
+@typechecked
+async def get_account_by_token(token: str) -> AccountData | EmployeeData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type == AccountType.ADMIN:
+            return await get_account_by_id(token, token_data.account.id)
+        elif token_data.account.type == AccountType.EMPLOYEE:
+            return await get_employee_by_id(token, token_data.account.id)
+        else:
+            raise ValueError

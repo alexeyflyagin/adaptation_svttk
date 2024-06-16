@@ -8,7 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from handlers import admin_roles_handlers, handlers_utils, last_handlers, admin_employees_handlers, trainings_handlers
+from handlers import admin_roles_handlers, last_handlers, admin_employees_handlers, trainings_handlers, \
+    my_account_handlers
 from handlers.handlers_utils import reset_state
 from handlers.last_handlers import help_handler
 from src import strings, commands
@@ -22,6 +23,7 @@ from src.utils import get_access_key_link, START_SESSION_MSG_ID
 router = Router()
 router.include_routers(trainings_handlers.router)
 router.include_routers(admin_roles_handlers.router)
+router.include_routers(my_account_handlers.router)
 router.include_routers(admin_employees_handlers.router)
 router.include_routers(last_handlers.router)
 
@@ -32,14 +34,14 @@ class LogInDataCD(CallbackData, prefix='log_in_data'):
     action: int
 
     class Action:
-        PIN = 0
+        READ_IT = 0
 
 
 def get_log_in_data_keyboard(first_name: str, access_key: str, has_pin: bool = True, has_log_in: bool = True):
     kbb = InlineKeyboardBuilder()
     if has_pin:
-        btn_pin_data = LogInDataCD(first_name=first_name, access_key=access_key, action=LogInDataCD.Action.PIN)
-        kbb.add(InlineKeyboardButton(text=strings.BTN_PIN, callback_data=btn_pin_data.pack()))
+        btn_read_it_data = LogInDataCD(first_name=first_name, access_key=access_key, action=LogInDataCD.Action.READ_IT)
+        kbb.add(InlineKeyboardButton(text=strings.BTN_READ_IT, callback_data=btn_read_it_data.pack()))
     if has_log_in:
         url = get_access_key_link(access_key=access_key)
         kbb.add(InlineKeyboardButton(text=strings.BTN_LOG_IN, url=url))
@@ -77,11 +79,11 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
         await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
         await reset_state(state)
         if log_in_data.is_first:
-            text = strings.LOG_IN__SUCCESS__FIRST.format(first_name=account.first_name,
-                                                         access_key=log_in_data.access_key)
+            text = strings.LOG_IN__SUCCESS__FIRST
             keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)
             await msg.answer(text, reply_markup=keyboard)
-        await help_handler(msg, state)
+        else:
+            await help_handler(msg, state)
     except KeyNotFoundError:
         await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
 
@@ -89,11 +91,11 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
 @router.callback_query(LogInDataCD.filter())
 async def log_in_data_callback(callback: CallbackQuery):
     data = LogInDataCD.unpack(callback.data)
-    if data.action == data.Action.PIN:
+    if data.action == data.Action.READ_IT:
         text = strings.LOG_IN__DATA__PINED.format(first_name=data.first_name, access_key=data.access_key)
         keyboard = get_log_in_data_keyboard(first_name=data.first_name, access_key=data.access_key, has_pin=False)
-        await callback.message.edit_text(text=text, reply_markup=keyboard)
-        await callback.message.pin(disable_notification=True)
+        await callback.message.answer(text, reply_markup=keyboard)
+        await callback.message.edit_reply_markup(reply_markup=None)
     await callback.answer()
 
 

@@ -23,6 +23,12 @@ class LevelType:
     QUIZ = "quiz"
 
 
+class FileType:
+    PHOTO = "photo"
+    VIDEO = "video"
+    DOCUMENT = "document"
+
+
 Base = declarative_base()
 
 
@@ -109,9 +115,7 @@ class LevelOrm(Base):
     title: Mapped[str]
     text: Mapped[Optional[str]] = mapped_column(nullable=True)
     html_text: Mapped[Optional[str]] = mapped_column(nullable=True)
-    photo_ids: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
-    video_ids: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
-    document_ids: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    files: Mapped[Optional[dict[str, str]]] = mapped_column(JSON)
     options: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
     correct_option_ids: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
     quiz_comment: Mapped[Optional[str]] = mapped_column(nullable=True)

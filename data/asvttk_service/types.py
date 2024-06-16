@@ -83,6 +83,7 @@ class StudentData(AccountData):
 @dataclasses.dataclass
 class LevelData:
     id: int
+    order: Optional[int]
     previous_level_id: int
     next_level_id: int
     training_id: int
@@ -91,9 +92,7 @@ class LevelData:
     title: str
     text: Optional[str]
     html_text: Optional[str]
-    photo_ids: Optional[list[str]]
-    video_ids: Optional[list[str]]
-    document_ids: Optional[list[str]]
+    files: dict[str, str]
     options: Optional[list[str]]
     correct_option_ids: Optional[list[int]]
     quiz_comment: Optional[str]
