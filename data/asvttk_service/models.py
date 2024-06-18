@@ -1,8 +1,10 @@
+import json
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 
 import sqlalchemy
-from sqlalchemy import JSON, ForeignKey, BigInteger
+from aiogram.types import Message
+from sqlalchemy import JSON, ForeignKey, BigInteger, TypeDecorator, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 
 from data.asvttk_service.utils import get_current_time, generate_access_key, generate_session_token
@@ -15,11 +17,7 @@ class AccountType(Enum):
 
 
 class LevelType:
-    TEXT = "text"
-    PHOTO = "photo"
-    VIDEO = "video"
-    DOCUMENT = "document"
-    MEDIA_GROUP = "media_group"
+    INFO = "info"
     QUIZ = "quiz"
 
 
@@ -27,6 +25,21 @@ class FileType:
     PHOTO = "photo"
     VIDEO = "video"
     DOCUMENT = "document"
+
+
+class MESSAGES(TypeDecorator):
+    impl = VARCHAR
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps([i.model_dump_json() for i in value])
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            msgs_json = json.loads(value)
+            value = [Message.model_validate_json(i) for i in msgs_json]
+        return value
 
 
 Base = declarative_base()
@@ -113,12 +126,7 @@ class LevelOrm(Base):
     type: Mapped[str]
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     title: Mapped[str]
-    text: Mapped[Optional[str]] = mapped_column(nullable=True)
-    html_text: Mapped[Optional[str]] = mapped_column(nullable=True)
-    files: Mapped[Optional[dict[str, str]]] = mapped_column(JSON)
-    options: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
-    correct_option_ids: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
-    quiz_comment: Mapped[Optional[str]] = mapped_column(nullable=True)
+    messages: Mapped[list[Message]] = mapped_column(MESSAGES)
 
     training = relationship("TrainingOrm", back_populates="levels")
 

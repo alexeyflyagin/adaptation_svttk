@@ -17,8 +17,8 @@ class EmployeeEditEmailStates(StatesGroup):
 
 
 class LevelCreateStates(StatesGroup):
-    Content = State()
     Title = State()
+    Content = State()
 
 
 class EmployeeEditFullNameStates(StatesGroup):

@@ -1,6 +1,7 @@
 import itertools
 from typing import Any, Optional
 
+from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -512,27 +513,19 @@ async def update_name_training(token: str, training_id: int, name: Optional[str]
 
 # Levels
 @typechecked
-async def create_level(token: str, level_type: str, training_id: int, title: str, text: Optional[str] = None,
-                       html_text: Optional[str] = None, files: dict[str, str] = None,
-                       options: Optional[list[str]] = None, correct_option_ids: Optional[list[int]] = None,
-                       quiz_comment: Optional[str] = None):
+async def create_level(token: str, level_type: str, training_id: int, title: str, messages: list[Message]):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
         if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
-        if title in ["", "-"]:
-            raise ValueError("The title should not be empty")
-        if not files:
-            files = {}
         query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id,
                                                         LevelOrm.next_level_id == None))
         last_level = query.scalars().first()
         last_level_id = last_level.id if last_level else None
         level = LevelOrm(previous_level_id=last_level_id, training_id=training_id, type=level_type,
-                         title=title, text=text, html_text=html_text, files=files, options=options,
-                         correct_option_ids=correct_option_ids, quiz_comment=quiz_comment)
+                         title=title, messages=messages)
         s.add(level)
         await s.flush()
         if last_level:

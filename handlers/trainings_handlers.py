@@ -1,3 +1,5 @@
+import asyncio
+import json
 from datetime import datetime
 from typing import Optional, Any
 
@@ -6,7 +8,7 @@ from aiogram.enums import ContentType, PollType
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_album import AlbumMessage
 
@@ -15,7 +17,8 @@ from data.asvttk_service.models import LevelType
 from data.asvttk_service.types import TrainingData
 from handlers.handlers_delete import DeleteItemCD, show_delete
 from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, list_keyboard, get_items_by_page, ListCD
-from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
+from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state, \
+    send_level, get_content_type_srt, get_content_text, get_content_html_text
 from data.asvttk_service import asvttk_service as service
 from src import commands, strings
 from src.states import MainStates, TrainingCreateStates, TrainingEditNameStates, LevelCreateStates
@@ -281,9 +284,9 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_training(data.token, training_id, callback.message, is_answer=False)
         elif data.action == data.Action.ADD:
-            await callback.message.answer(strings.CREATE_LEVEL__CONTENT)
             await reset_state(state)
-            await state.set_state(LevelCreateStates.Content)
+            await callback.message.answer(strings.CREATE_LEVEL__TITLE)
+            await state.set_state(LevelCreateStates.Title)
             await state.update_data({UPDATED_ITEM_ID: training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         elif data.action == data.Action.SELECT and data.selected_item_id != -1:
@@ -308,13 +311,16 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.NEXT_LEVEL and level.next_level_id:
             await show_about_level(data.token, callback.message, data.training_id, level.next_level_id, is_answer=False)
         elif data.action == data.Action.PREVIOUS_LEVEL and level.previous_level_id:
-            await show_about_level(data.token, callback.message, data.training_id, level.previous_level_id, is_answer=False)
+            await show_about_level(data.token, callback.message, data.training_id, level.previous_level_id,
+                                   is_answer=False)
         elif data.action == data.Action.DELETE:
             level = await service.get_level_by_id(data.token, data.level_id)
             text = strings.LEVEL__DELETE.format(level_name=cut_text(level.title),
                                                 training_name=cut_text(level.training.name))
             await show_delete(data.token, callback.message, data.level_id, text, TAG_DELETE_LEVEL, is_answer=False,
                               args=data.training_id)
+        elif data.action == data.Action.COUNTER:
+            await show_level(data.token, callback.message, data.level_id)
         await callback.answer()
     except NotFoundError:
         await show_about_level(data.token, callback.message, data.training_id, data.level_id, is_answer=False)
@@ -343,7 +349,7 @@ async def delete_level_callback(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(TrainingStartCD.filter())
-async def level_callback(callback: CallbackQuery, state: FSMContext):
+async def training_start_callback(callback: CallbackQuery, state: FSMContext):
     data = TrainingStartCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
@@ -356,43 +362,7 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
         await token_not_valid_error_for_callback(callback)
 
 
-CREATE_LEVEL_CONTENT_TEXT = 'create_level_content_text'
-CREATE_LEVEL_CONTENT_HTML_TEXT = 'create_level_content_html_text'
-CREATE_LEVEL_CONTENT_TYPE = 'create_content_type'
-CREATE_LEVEL_CONTENT_FILES = 'create_content_files'
-CREATE_LEVEL_CONTENT_CORRECT_OPTION_IDS = 'create_content_correct_option_ids'
-CREATE_LEVEL_CONTENT_OPTIONS = 'create_content_options'
-CREATE_LEVEL_CONTENT_QUIZ_COMMENT = 'create_content_quiz_comment'
-
-
-@router.message(LevelCreateStates.Content)
-async def create_level_content_handler(msg: AlbumMessage, state: FSMContext):
-    token = await get_token(state)
-    try:
-        await service.token_validate(token)
-        text = msg.text if msg.text else msg.caption
-        html_text = msg.html_text if msg.html_text else None
-        level_type = get_level_type_from_content_type(msg.content_type)
-        files = get_files_from_msg(msg)
-        options = None
-        correct_option_ids = None
-        quiz_comment = None
-        if msg.content_type == ContentType.POLL and msg.poll.type == PollType.QUIZ:
-            level_type = get_level_type_from_content_type(msg.content_type, PollType.QUIZ)
-            options = [i.text for i in msg.poll.options]
-            correct_option_ids = [msg.poll.correct_option_id]
-            quiz_comment = msg.poll.explanation
-        await state.update_data({CREATE_LEVEL_CONTENT_TEXT: text, CREATE_LEVEL_CONTENT_HTML_TEXT: html_text,
-                                 CREATE_LEVEL_CONTENT_TYPE: level_type, CREATE_LEVEL_CONTENT_OPTIONS: options,
-                                 CREATE_LEVEL_CONTENT_FILES: files,
-                                 CREATE_LEVEL_CONTENT_QUIZ_COMMENT: quiz_comment,
-                                 CREATE_LEVEL_CONTENT_CORRECT_OPTION_IDS: correct_option_ids})
-        await state.set_state(LevelCreateStates.Title)
-        await msg.answer(strings.CREATE_LEVEL__TITLE)
-    except TypeError:
-        await msg.answer(strings.CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT)
-    except TokenNotValidError:
-        await token_not_valid_error(msg, state)
+CREATE_LEVEL_TITLE = "create_level_title"
 
 
 @router.message(LevelCreateStates.Title)
@@ -403,23 +373,36 @@ async def create_level_title_handler(msg: Message, state: FSMContext):
         return
     try:
         await service.token_validate(token)
+        await state.update_data({CREATE_LEVEL_TITLE: msg.text})
+        await state.set_state(LevelCreateStates.Content)
+        await msg.answer(strings.CREATE_LEVEL__CONTENT)
+    except TokenNotValidError:
+        await token_not_valid_error(msg, state)
+
+
+@router.message(LevelCreateStates.Content)
+async def create_level_content_handler(msg: AlbumMessage, state: FSMContext):
+    token = await get_token(state)
+
+    try:
+        await service.token_validate(token)
+        if msg.content_type == ContentType.POLL and msg.poll.type == PollType.QUIZ:
+            level_type = get_level_type_from_content_type(msg.content_type, PollType.QUIZ)
+        else:
+            level_type = get_level_type_from_content_type(msg.content_type)
         state_data = await state.get_data()
-        title = msg.text
+        title = state_data[CREATE_LEVEL_TITLE]
         training_id = state_data[UPDATED_ITEM_ID]
-        await service.create_level(token,
-                                   level_type=state_data[CREATE_LEVEL_CONTENT_TYPE],
-                                   training_id=training_id,
-                                   title=title, text=state_data[CREATE_LEVEL_CONTENT_TEXT],
-                                   html_text=state_data[CREATE_LEVEL_CONTENT_HTML_TEXT],
-                                   files=state_data[CREATE_LEVEL_CONTENT_FILES],
-                                   options=state_data[CREATE_LEVEL_CONTENT_OPTIONS],
-                                   correct_option_ids=state_data[CREATE_LEVEL_CONTENT_CORRECT_OPTION_IDS],
-                                   quiz_comment=state_data[CREATE_LEVEL_CONTENT_QUIZ_COMMENT])
+        messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
+        await service.create_level(token, level_type=level_type, training_id=training_id, title=title,
+                                   messages=messages)
         await msg.answer(strings.CREATE_LEVEL__SUCCESS)
         updated_msg = state_data[UPDATED_MSG]
         if updated_msg:
             await show_levels(token, training_id, msg, edited_msg_id=updated_msg[0])
         await reset_state(state)
+    except TypeError:
+        await msg.answer(strings.CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
 
@@ -488,22 +471,22 @@ async def show_levels(token: str, training_id: int, msg: Message,
     try:
         training = await service.get_training_by_id(token, training_id)
         levels = await service.get_levels_by_training(token, training_id)
-        list_item = [ListItem(strings.TRAININGS__LEVELS__ITEM__TYPE__START, item_id=-1)]
+        list_item = [ListItem(strings.TRAININGS__LEVELS__ITEM__TYPE__START_I, item_id=-1)]
         list_item += [ListItem(str(i.order), i.id, i) for i in levels]
         keyboard = list_keyboard(token, tag=TAG_LEVELS, pages=[list_item], max_btn_in_row=5,
                                  back_btn_text=strings.BTN_BACK, arg=training_id)
         items_str = [
             strings.TRAININGS__LEVELS__ITEM__NO_INDEX.format(
-                type_icon=strings.TRAININGS__LEVELS__ITEM__TYPE__START,
+                type_icon=strings.TRAININGS__LEVELS__ITEM__TYPE__START_I,
                 level_title=cut_text(training.start_text.strip()),
             )
         ]
         for item in list_item:
             if item.item_id == -1:
                 continue
-            icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__INFO
+            icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__INFO_I
             if item.obj.type == LevelType.QUIZ:
-                icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ
+                icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ_I
             item_str = strings.TRAININGS__LEVELS__ITEM.format(
                 type_icon=icon_type_str,
                 index=item.name,
@@ -516,32 +499,47 @@ async def show_levels(token: str, training_id: int, msg: Message,
         await show_trainings(token, msg, is_answer=False)
 
 
-async def show_about_level(token: str, msg: Message, training_id: int, level_id: int, edited_msg_id: Optional[int] = None,
-                           is_answer: bool = True):
+async def show_about_level(token: str, msg: Message, training_id: int, level_id: int,
+                           edited_msg_id: Optional[int] = None, is_answer: bool = True):
     text = strings.LEVEL__NOT_FOUND
     keyboard = level_keyboard(token, training_id)
     try:
         level = await service.get_level_by_id(token, level_id)
         levels = await service.get_levels_by_training(token, level.training_id)
         icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__INFO
+        icon_type_icon = strings.TRAININGS__LEVELS__ITEM__TYPE__INFO_I
         if level.type == LevelType.QUIZ:
             icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ
-        attached_counter = len(level.files.keys())
-        content_text = level.text if level.text else strings.LEVEL__NO_TEXT
+            icon_type_icon = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ_I
+        content_type = get_content_type_srt(level.messages)
+        content_text = get_content_html_text(level.messages)
+        content_text = "\n—\n" + content_text if content_text else ""
+        date_create = datetime.fromtimestamp(level.date_create).strftime(strings.DATE_FORMAT_FULL)
         text = strings.LEVEL.format(type_icon=icon_type_str, index=level.order, level_name=level.title,
-                                    training_name=cut_text(level.training.name), level_type=icon_type_str,
-                                    attached_counter=attached_counter, text=content_text)
+                                    data_create=date_create, training_name=cut_text(level.training.name),
+                                    level_type=icon_type_str, content_type=content_type,
+                                    level_type_icon=icon_type_icon) + content_text
         keyboard = level_keyboard(token, training_id, level_id, level.order, len(levels))
         await show(msg, text, is_answer, edited_msg_id, keyboard)
     except NotFoundError:
         await show(msg, text, is_answer, edited_msg_id, keyboard)
 
 
+async def show_level(token: str, msg: Message, level_id: int, edited_msg_id: Optional[int] = None):
+    try:
+        level = await service.get_level_by_id(token, level_id)
+        await send_level(msg, level.messages)
+    except ValueError as _:
+        await show(msg, text=strings.LEVEL__ERROR__VIEW, edited_msg_id=edited_msg_id, is_answer=True)
+    except NotFoundError:
+        await show(msg, text=strings.LEVEL__NOT_FOUND, edited_msg_id=edited_msg_id, is_answer=True)
+
+
 async def show_about_level_start(token: str, msg: Message, training_id: int, edited_msg_id: Optional[int] = None,
                                  is_answer: bool = True):
     try:
         training = await service.get_training_by_id(token, training_id)
-        text = strings.LEVEL__START.format(training_name=cut_text(training.name), text=training.start_text)
+        text = strings.LEVEL__START.format(training_name=cut_text(training.name), html_text=training.html_start_text)
         keyboard = training_start_keyboard(token, training_id)
         await show(msg, text, is_answer, edited_msg_id, keyboard=keyboard)
     except NotFoundError:

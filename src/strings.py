@@ -17,7 +17,7 @@ BTN_ADD = "+ Добавить"
 BTN_BACK = "« Назад"
 BTN_EDIT = "Изменить"
 BTN_SAVE = "✓ Сохранить"
-BTN_READ_IT = "Я прочитал"
+BTN_READ_IT = "☑Я прочитал(а)"
 BTN_CLOSE = "X  Сохранить"
 BTN_SAVE_SYMBOL = "✓"
 BTN_ADD_SYMBOL = "+"
@@ -43,6 +43,21 @@ BTN_ROLES = "Роли"
 
 # DateFormats
 DATE_FORMAT_FULL = "%d.%m.%Y"
+
+
+# ContentType
+CONTENT_TYPE__TEXT = "Текст"
+CONTENT_TYPE__PHOTO = "Фото"
+CONTENT_TYPE__VIDEO = "Видео"
+CONTENT_TYPE__DOCUMENT = "Документ"
+CONTENT_TYPE__AUDIO = "Аудиофайл"
+CONTENT_TYPE__STICKER = "Стикер"
+CONTENT_TYPE__ANIMATION = "GIF"
+CONTENT_TYPE__MEDIA_GROUP = "Медиа-группа"
+CONTENT_TYPE__CONTACT = "Контакт"
+CONTENT_TYPE__LOCATION = "Геопозиция"
+CONTENT_TYPE__POLL = "Опрос"
+CONTENT_TYPE__POLL__QUIZ = "Опрос-викторина"
 
 
 # General
@@ -329,9 +344,12 @@ ROLE__ALL_TRAININGS__NOT_FOUND = f"""Курсов нет. Сначала доб�
 
 /{commands.TRAININGS.command} - {commands.TRAININGS.description}"""
 
-TRAININGS__LEVELS__ITEM__TYPE__START = """👋"""
-TRAININGS__LEVELS__ITEM__TYPE__INFO = """ℹ️"""
-TRAININGS__LEVELS__ITEM__TYPE__QUIZ = """❓"""
+TRAININGS__LEVELS__ITEM__TYPE__START_I = """👋"""
+TRAININGS__LEVELS__ITEM__TYPE__INFO_I = """▫️️"""
+TRAININGS__LEVELS__ITEM__TYPE__QUIZ_I = """🔸"""
+
+TRAININGS__LEVELS__ITEM__TYPE__INFO = "ИНФОРМАЦИЯ"
+TRAININGS__LEVELS__ITEM__TYPE__QUIZ = "КОНТРОЛЬ"
 
 TRAININGS__LEVELS__ITEM = """{type_icon}  <b>{index}</b>  {level_title}"""
 TRAININGS__LEVELS__ITEM__NO_INDEX = """{type_icon}  {level_title}"""
@@ -353,13 +371,18 @@ CREATE_LEVEL__TITLE__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Неко
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
+ALLOW_CONTENT_TYPE_HELPER = f"""{code(TRAININGS__LEVELS__ITEM__TYPE__QUIZ)}:  <i>{CONTENT_TYPE__POLL__QUIZ}</i>
+{code(TRAININGS__LEVELS__ITEM__TYPE__INFO)}:  <i>{CONTENT_TYPE__MEDIA_GROUP} (до 10 элементов)</i>, <i>{CONTENT_TYPE__TEXT}</i>, <i>{CONTENT_TYPE__PHOTO}</i>, <i>{CONTENT_TYPE__VIDEO}</i>, <i>{CONTENT_TYPE__DOCUMENT}</i>, <i>{CONTENT_TYPE__AUDIO}</i>, <i>{CONTENT_TYPE__STICKER}</i>, <i>{CONTENT_TYPE__ANIMATION}</i>, <i>{CONTENT_TYPE__CONTACT}</i>, <i>{CONTENT_TYPE__LOCATION}</i>"""
+
 CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат контента. Попробуйте еще раз.
-Вы можете прислать текст (до 10 файлов или фотографий) или викторину.
+
+{ALLOW_CONTENT_TYPE_HELPER}
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-CREATE_LEVEL__CONTENT = f"""Пришлите контент для уровня одним сообщением.
-Вы можете прислать: <i>Викторина</i>, <i>Текст</i>, <i>Файлы</i>.
+CREATE_LEVEL__CONTENT = f"""Пришлите контент для уровня <b>одним сообщением</b>.
+
+{ALLOW_CONTENT_TYPE_HELPER}
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
@@ -368,26 +391,26 @@ CREATE_LEVEL__SUCCESS = f"""Новый уровень успешно созда�
 
 LEVEL__NOT_FOUND = f"""Уровень не найден."""
 
-LEVEL = f"""<b>{{index}}</b>  <code>{{level_name}}</code>
-Курс:  <code>{{training_name}}</code>
-Тип уровня:  <code>{{level_type}}</code>
-📎:  <code>{{attached_counter}}</code>
-—
-<blockquote expandable>{{text}}</blockquote>"""
+LEVEL__ERROR__VIEW = f"""<b>Ошибка!</b> Не удалось отобразить уровень."""
+
+LEVEL = f"""<code>{{training_name}}</code>  :  <code>{{level_name}}</code>
+Дата создания:  <code>{{data_create}}</code>
+Тип уровня:  {{level_type_icon}} <code>{{level_type}}</code>
+Тип контента:  <code>{{content_type}}</code>"""
 
 
-LEVEL__START = f"""{TRAININGS__LEVELS__ITEM__TYPE__START}  Начальное сообщение
+LEVEL__START = f"""{TRAININGS__LEVELS__ITEM__TYPE__START_I}  Начальное сообщение
 Курс:  <code>{{training_name}}</code>
 
 Сообщение будет показано в самом начале обучения. Поприветствуйте ученика и расскажите ему про данный курс.
 —
-<blockquote expandable>{{text}}</blockquote>"""
+{{html_text}}"""
 
 
 LEVEL__DELETE = f"""После подтверждения действия, уровень будет навсегда удален!
 —
 Вы действительно хотите удалить уровень
-<code>{{level_name}}</code> из курса <code>{{training_name}}</code>?"""
+'<code>{{level_name}}</code>' из курса '<code>{{training_name}}</code>'?"""
 
 LEVEL__DELETED = f"""✅  Уровень '{{level_name}}' успешно удален!"""
 

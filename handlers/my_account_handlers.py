@@ -13,7 +13,7 @@ from handlers.handlers_utils import get_token, token_not_valid_error
 from src import commands, strings
 from src.states import MainStates
 from src.strings import field, code, italic
-from src.utils import get_account_type_str, show, get_full_name
+from src.utils import get_account_type_str, show
 
 router = Router()
 

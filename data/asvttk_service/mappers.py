@@ -74,12 +74,7 @@ def level_orm_to_level_data(it: LevelOrm, order: Optional[int], training: Option
         type=it.type,
         date_create=it.date_create,
         title=it.title,
-        text=it.text,
-        html_text=it.html_text,
-        files=it.files,
-        options=it.options,
-        correct_option_ids=it.correct_option_ids,
-        quiz_comment=it.quiz_comment,
+        messages=it.messages,
         training=training,
     )
 

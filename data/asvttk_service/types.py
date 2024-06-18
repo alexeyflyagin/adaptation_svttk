@@ -1,6 +1,8 @@
 import dataclasses
 from typing import Optional
 
+from aiogram.types import Message
+
 from data.asvttk_service.models import AccountType, LevelType
 
 
@@ -90,11 +92,6 @@ class LevelData:
     type: str
     date_create: int
     title: str
-    text: Optional[str]
-    html_text: Optional[str]
-    files: dict[str, str]
-    options: Optional[list[str]]
-    correct_option_ids: Optional[list[int]]
-    quiz_comment: Optional[str]
+    messages: list[Message]
     training: Optional[TrainingData]
 
