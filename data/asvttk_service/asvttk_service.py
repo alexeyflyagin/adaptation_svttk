@@ -11,14 +11,16 @@ from typeguard import typechecked
 from data.asvttk_service import types
 from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
-    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError
+    KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, TrainingStateError, \
+    TrainingIsActiveError, TrainingIsNotActiveError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
     TrainingAndRoleOrm, RoleAndAccountOrm, LevelOrm
-from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData
+from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData, \
+    StudentData
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
-    empty_check
+    empty_check, get_current_time
 from src import strings
 
 
@@ -152,17 +154,31 @@ async def get_employee_by_id(token: str, employee_id: int) -> EmployeeData:
 @typechecked
 async def __create_account(s: AsyncSession, account_type: AccountType, first_name: str,
                            last_name: Optional[str] = None, patronymic: Optional[str] = None,
-                           email: Optional[str] = None, training: Optional[int] = None) -> CreatedAccountData:
+                           email: Optional[str] = None, training_id: Optional[int] = None) -> CreatedAccountData:
     email_check(email)
     initials_check(first_name, last_name, patronymic)
     employees_orm = AccountOrm(type=account_type, email=email, first_name=first_name, last_name=last_name,
-                               patronymic=patronymic, training=training)
+                               patronymic=patronymic, training_id=training_id)
     s.add(employees_orm)
     await s.flush()
     key_orm = KeyOrm(account_id=employees_orm.id)
     s.add(key_orm)
     await s.flush()
     return CreatedAccountData(employees_orm.id, key_orm.access_key)
+
+
+@typechecked
+async def get_account_by_token(token: str) -> AccountData | EmployeeData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type == AccountType.ADMIN:
+            return await get_account_by_id(token, token_data.account.id)
+        elif token_data.account.type == AccountType.EMPLOYEE:
+            return await get_employee_by_id(token, token_data.account.id)
+        elif token_data.account.type == AccountType.STUDENT:
+            return await get_student_by_id(token, token_data.account.id)
+        else:
+            raise ValueError()
 
 
 @typechecked
@@ -475,8 +491,59 @@ async def get_training_by_id(token: str, training_id: int):
         if not training:
             raise NotFoundError()
         students = [account_orm_to_student_data(i, None) for i in training.students]
-        levels = [level_orm_to_level_data(i, None,None) for i in training.levels]
+        levels = [level_orm_to_level_data(i, None, None) for i in training.levels]
         return training_orm_to_training_data(training, students, levels)
+
+
+async def __training_is_started_check(s: AsyncSession, training_id: int):
+    query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
+    training = query.scalars().first()
+    if training.date_start and not training.date_end:
+        raise TrainingIsActiveError()
+
+
+async def training_is_started_check(token: str, training_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        await __training_is_started_check(s, training_id)
+
+
+async def __training_is_not_started_check(s: AsyncSession, training_id: int):
+    query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
+    training = query.scalars().first()
+    if not (training.date_start and not training.date_end):
+        raise TrainingIsNotActiveError()
+
+
+async def training_is_not_started_check(token: str, training_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        await __training_is_not_started_check(s, training_id)
+
+
+@typechecked
+async def update_start_msg_training(token: str, training_id: int, msg: list[Message]):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
+        training = query.scalars().first()
+        if not training:
+            return NotFoundError()
+        await __training_is_started_check(s, training_id)
+        training.message = msg
+        await s.commit()
 
 
 @typechecked
@@ -491,6 +558,7 @@ async def delete_training(token: str, training_id: int):
         training = query.scalars().first()
         if not training:
             return NotFoundError()
+        await __training_is_started_check(s, training_id)
         await s.delete(training)
         await s.commit()
 
@@ -507,7 +575,48 @@ async def update_name_training(token: str, training_id: int, name: Optional[str]
         training = query.scalars().first()
         if not training:
             raise NotFoundError
+        await __training_is_started_check(s, training_id)
         training.name = name
+        await s.commit()
+
+
+@typechecked
+async def start_training(token: str, training_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students))
+                                .filter(TrainingOrm.id == training_id))
+        training = query.scalars().unique().first()
+        if not training:
+            raise NotFoundError
+        if training.date_start and not training.date_end:
+            raise TrainingStateError()
+        training.date_start = get_current_time()
+        training.date_end = None
+        for student in training.students:
+            await s.delete(student)
+        await s.commit()
+
+
+@typechecked
+async def stop_training(token: str, training_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
+        training = query.scalars().first()
+        if not training:
+            raise NotFoundError
+        if not (training.date_start and not training.date_end):
+            raise TrainingStateError()
+        training.date_end = get_current_time()
         await s.commit()
 
 
@@ -520,6 +629,7 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
+        await __training_is_started_check(s, training_id)
         query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id,
                                                         LevelOrm.next_level_id == None))
         last_level = query.scalars().first()
@@ -530,6 +640,41 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
         await s.flush()
         if last_level:
             last_level.next_level_id = level.id
+        await s.commit()
+
+
+@typechecked
+async def update_content_level_by_id(token: str, level_type: str, level_id: int, messages: list[Message]):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level_id))
+        level = query.scalars().first()
+        if not level:
+            raise NotFoundError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, level.training_id, token_data.account.id)
+        await __training_is_started_check(s, level.training_id)
+        level.messages = messages
+        level.type = level_type
+        await s.commit()
+
+
+@typechecked
+async def update_title_level_by_id(token: str, level_id: int, title: str):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level_id))
+        level = query.scalars().first()
+        if not level:
+            raise NotFoundError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, level.training_id, token_data.account.id)
+        await __training_is_started_check(s, level.training_id)
+        level.title = title
         await s.commit()
 
 
@@ -545,6 +690,7 @@ async def delete_level_by_id(token: str, level_id: int):
             raise NotFoundError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
+        await __training_is_started_check(s, level.training_id)
         if level.next_level_id:
             query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level.next_level_id))
             next_level = query.scalars().first()
@@ -609,13 +755,34 @@ async def get_level_by_id(token: str, level_id: int) -> LevelData:
         return level_orm_to_level_data(level, index + 1, training_data)
 
 
+# Students
 @typechecked
-async def get_account_by_token(token: str) -> AccountData | EmployeeData:
+async def create_student(token: str, training_id: int, first_name: str, last_name: Optional[str] = None,
+                         patronymic: Optional[str] = None) -> CreatedAccountData:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type == AccountType.ADMIN:
-            return await get_account_by_id(token, token_data.account.id)
-        elif token_data.account.type == AccountType.EMPLOYEE:
-            return await get_employee_by_id(token, token_data.account.id)
-        else:
-            raise ValueError
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        await __training_is_not_started_check(s, training_id)
+        res = await __create_account(s, AccountType.STUDENT, first_name, last_name, patronymic, training_id=training_id)
+        await s.commit()
+        return res
+
+
+@typechecked
+async def get_student_by_id(token: str, student_id: int) -> StudentData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type is [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
+            raise AccessError
+        if token_data.account.type == AccountType.STUDENT and token_data.account.id != student_id:
+            raise AccessError
+        query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.training))
+                                .filter(AccountOrm.type == AccountType.STUDENT, AccountOrm.id == student_id))
+        student = query.scalars().first()
+        if not student:
+            raise NotFoundError()
+        training = training_orm_to_training_data(student.training, None, None)
+        return account_orm_to_student_data(student, training=training)

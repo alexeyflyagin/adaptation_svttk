@@ -7,6 +7,7 @@ from aiogram.types import Message
 from sqlalchemy import JSON, ForeignKey, BigInteger, TypeDecorator, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 
+from data.asvttk_service import default
 from data.asvttk_service.utils import get_current_time, generate_access_key, generate_session_token
 
 
@@ -27,7 +28,7 @@ class FileType:
     DOCUMENT = "document"
 
 
-class MESSAGES(TypeDecorator):
+class MSGS(TypeDecorator):
     impl = VARCHAR
 
     def process_bind_param(self, value, dialect):
@@ -126,7 +127,7 @@ class LevelOrm(Base):
     type: Mapped[str]
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     title: Mapped[str]
-    messages: Mapped[list[Message]] = mapped_column(MESSAGES)
+    messages: Mapped[list[Message]] = mapped_column(MSGS)
 
     training = relationship("TrainingOrm", back_populates="levels")
 
@@ -145,9 +146,7 @@ class TrainingOrm(Base):
     __tablename__ = "trainings"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str]
-    start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
-    html_start_text: Mapped[str] = mapped_column(default="Стартовое сообщение.")
-    photo_id: Mapped[Optional[str]] = mapped_column(nullable=True)
+    message: Mapped[list[Message]] = mapped_column(MSGS, default=[default.DEFAULT_TRAINING_START_MSG])
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     date_start: Mapped[Optional[int]] = mapped_column(nullable=True)
     date_end: Mapped[Optional[int]] = mapped_column(nullable=True)

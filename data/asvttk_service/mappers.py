@@ -53,9 +53,7 @@ def training_orm_to_training_data(it: TrainingOrm, students: Optional[list[Accou
     return TrainingData(
         id=it.id,
         name=it.name,
-        start_text=it.start_text,
-        html_start_text=it.html_start_text,
-        photo_id=it.photo_id,
+        message=it.message,
         date_create=it.date_create,
         date_start=it.date_start,
         date_end=it.date_end,

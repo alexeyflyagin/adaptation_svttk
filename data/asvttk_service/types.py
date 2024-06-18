@@ -53,14 +53,16 @@ class AccountData:
 class TrainingData:
     id: int
     name: str
-    start_text: str
-    html_start_text: str
-    photo_id: Optional[str]
+    message: list[Message]
     date_create: int
     date_start: Optional[int]
     date_end: Optional[int]
     students: Optional[list[AccountData]]
     levels: Optional[list["LevelData"]]
+
+    @property
+    def msg(self):
+        return self.message[0]
 
 
 @dataclasses.dataclass

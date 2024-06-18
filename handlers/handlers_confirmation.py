@@ -8,19 +8,19 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from src import strings
 
 
-class DeleteItemCD(CallbackData, prefix="delete"):
+class ConfirmationCD(CallbackData, prefix="confirmation"):
     token: str
     tag: str
-    is_delete: bool
-    deleted_item_id: int
+    is_agree: bool
+    item_id: int
     args: Optional[Any] = None
 
 
-def delete_keyboard(token: str, tag: str, deleted_item_id: int, args: Optional[Any] = None):
+def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None):
     kbb = InlineKeyboardBuilder()
     kbb.adjust(1)
-    btn_yes_data = DeleteItemCD(token=token, tag=tag, is_delete=True, args=args, deleted_item_id=deleted_item_id).pack()
-    btn_no_data = DeleteItemCD(token=token, tag=tag, is_delete=False, args=args, deleted_item_id=deleted_item_id).pack()
+    btn_yes_data = ConfirmationCD(token=token, tag=tag, is_agree=True, args=args, item_id=item_id).pack()
+    btn_no_data = ConfirmationCD(token=token, tag=tag, is_agree=False, args=args, item_id=item_id).pack()
     btn_yes = InlineKeyboardButton(text=strings.BTN_DELETE_YES, callback_data=btn_yes_data)
     btn_no = InlineKeyboardButton(text=strings.BTN_DELETE_NO, callback_data=btn_no_data)
     btn_no_1 = InlineKeyboardButton(text=strings.BTN_DELETE_NO_1, callback_data=btn_no_data)
@@ -32,9 +32,9 @@ def delete_keyboard(token: str, tag: str, deleted_item_id: int, args: Optional[A
     return kbb.as_markup()
 
 
-async def show_delete(token: str, msg: Message, deleted_item_id: int, text: str, tag: str,
-                      is_answer: bool = True, args: Optional[Any] = None):
-    keyboard = delete_keyboard(token, tag, deleted_item_id=deleted_item_id, args=args)
+async def show_confirmation(token: str, msg: Message, item_id: int, text: str, tag: str,
+                            is_answer: bool = True, args: Optional[Any] = None):
+    keyboard = confirmation_keyboard(token, tag, item_id=item_id, args=args)
     if is_answer:
         await msg.answer(text, reply_markup=keyboard)
     else:

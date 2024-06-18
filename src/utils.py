@@ -7,6 +7,7 @@ from aiogram.types import (Message, InputMediaPhoto, InputMediaVideo, InputMedia
                            InputMediaAudio)
 from aiogram_album import AlbumMessage
 
+from data.asvttk_service.exceptions import InitialsValueError
 from data.asvttk_service.models import LevelType, FileType, AccountType
 from data.asvttk_service.types import AccountData, TrainingData
 from src import strings
@@ -115,12 +116,25 @@ def cut_text(it: str, max_symbols: int = 24):
     return it
 
 
+def is_started_training(training: TrainingData):
+    if training.date_start and not training.date_end:
+        return True
+    return False
+
+
+def get_initials_from_text(text: str, has_none: bool = False) -> list[str]:
+    initials = [i.replace(" ", "") for i in text.split()]
+    if len(initials) != 3 or initials[1] == '-':
+        raise InitialsValueError()
+    if has_none:
+        initials = [i if i != "-" else None for i in initials]
+    return initials
+
+
 def get_training_status(training: TrainingData):
     status = strings.TRAINING_STATUS__INACTIVE
-    if training.date_start:
+    if is_started_training(training):
         status = strings.TRAINING_STATUS__ACTIVE
-    if training.date_end:
-        status = strings.TRAINING_STATUS__COMPLETED
     return status
 
 

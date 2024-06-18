@@ -11,13 +11,22 @@ def italic(it: str):
     return f"<i>{it}</i>"
 
 
+def blockquote(it: str, expand: bool = True):
+    if expand:
+        return f"<blockquote expandable>{it}</blockquote>"
+    else:
+        return f"<blockquote>{it}</blockquote>"
+
+
 # BTNs
 BTN_CREATE = "+ Создать"
 BTN_ADD = "+ Добавить"
 BTN_BACK = "« Назад"
 BTN_EDIT = "Изменить"
+BTN_EDIT_CONTENT = "Изм. Контент"
+BTN_EDIT_TITLE = "Изм. Заголовок"
 BTN_SAVE = "✓ Сохранить"
-BTN_READ_IT = "☑Я прочитал(а)"
+BTN_READ_IT = "Я прочитал(а)"
 BTN_CLOSE = "X  Сохранить"
 BTN_SAVE_SYMBOL = "✓"
 BTN_ADD_SYMBOL = "+"
@@ -38,12 +47,13 @@ BTN_RENAME = "Переименовать"
 BTN_INVITE = "Пригласить"
 BTN_PIN = "Закрепить"
 BTN_LOG_IN = "Войти"
+BTN_STUDENTS = "Ученики"
 BTN_ROLES = "Роли"
-
+BTN_TRAINING_START = "▶️  Запустить"
+BTN_TRAINING_STOP = "⏹  Остановить"
 
 # DateFormats
 DATE_FORMAT_FULL = "%d.%m.%Y"
-
 
 # ContentType
 CONTENT_TYPE__TEXT = "Текст"
@@ -58,7 +68,6 @@ CONTENT_TYPE__CONTACT = "Контакт"
 CONTENT_TYPE__LOCATION = "Геопозиция"
 CONTENT_TYPE__POLL = "Опрос"
 CONTENT_TYPE__POLL__QUIZ = "Опрос-викторина"
-
 
 # General
 SESSION_ERROR = f"""Ошибка! Истек срок сессии."""
@@ -79,13 +88,11 @@ LOG_IN__SUCCESS__FIRST = f"""⚠️  <b>Внимание:</b> Вы зашли в
 
 Нажмите '<code>{BTN_READ_IT}</code>', когда будете готовы приступить к сохранению ключа."""
 
-
-LOG_IN__DATA__PINED = f"""Ваши данные для входа, <code>{{first_name}}</code>.
+LOG_IN__DATA = f"""Ваши данные для входа, <code>{{first_name}}</code>.
 Ключ доступа:  <tg-spoiler>{{access_key}}</tg-spoiler>
 <i>(Храните ключ доступа в безопасном месте!)</i>
 
 Нажмите '<code>{BTN_LOG_IN}</code>' чтобы войти в этот аккаунт."""
-
 
 LOG_IN__ACCOUNT_NOT_FOUND = """
 <b>Ошибка!</b> Аккаунт не найден.
@@ -95,10 +102,8 @@ LOG_IN__NO_ACCESS_KEY = """
 <b>Ошибка!</b> Вы не указали ключ доступа.
 """
 
-
 # Help
 HELP__NO_AUTHORIZATION = """Для начала необходимо войти в аккаунт по ссылке, содержащей в себе ключ доступа."""
-
 
 HELP__ADMIN = f"""Список команд, доступных вам.
 
@@ -120,12 +125,10 @@ HELP__EMPLOYEE = f"""Список команд, доступных вам.
 /{commands.TRAININGS.command} - {commands.TRAININGS.description}
 """
 
-
 # roles
 ROLES = f"""Выберите существующую роль или создайте новую."""
 
 ROLES__EMPTY = f"""Список ролей пуст. Создайте первую роль."""
-
 
 CREATE_ROLE__ENTER_NAME = f"""Введите название роли.
 <i>(Максимум 15 символов)</i>
@@ -146,14 +149,12 @@ CREATE_ROLE__ERROR_FORMAT = f"""<b>Ошибка!</b> Формат названи
 
 CREATE_ROLE__SUCCESS = f"""Новая роль с именем '<code>{{role_name}}</code>' успешно создана!"""
 
-
 ROLE__RENAME = f"""Введите новое название для роли '<code>{{role_name}}</code>'.
 <i>(Максимум 15 символов)</i>
 
 /{commands.ROLES.command} - {commands.ROLES.description}"""
 
 ROLE__RENAME__SUCCESS = f"""Название роли успешно сменено!"""
-
 
 ROLE = f"""Роль '<code>{{role_name}}</code>'
 Дата создания: <code>{{date_create}}</code>
@@ -172,7 +173,6 @@ ROLE__NOT_FOUND = f"""Ошибка! Роль не найдена."""
 ROLE__TRAININGS = f"""Все курсы у роли  '<code>{{role_name}}</code>'.
 —
 Нажми на курс, чтобы отвязать его."""
-
 
 # Employees
 EMPLOYEES_ITEM = """<b>{index}</b>  <b>{full_name}</b>
@@ -195,18 +195,16 @@ CREATE_EMPLOYEE = f"""Введите <b>ФИО</b> сотрудника.
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-CREATE_EMPLOYEE__ERROR_FORMAT = f"""<b>Ошибка!</b> Формат ФИО некорректен. Попробуйте еще раз.
+CREATE_ACCOUNT__ERROR_FORMAT = f"""<b>Ошибка!</b> Формат ФИО некорректен. Попробуйте еще раз.
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
 CREATE_EMPLOYEE__SUCCESS = f"""Аккаунт для сотрудника готов!
 
 Ключ доступа: <tg-spoiler>{{access_key}}</tg-spoiler>
-
 <code>{{access_link}}</code>
 
 Пригласите пользователя, нажав '<code>Пригласить</code>'."""
-
 
 EMPLOYEE = """Сотрудник
 Фамилия:  <code>{last_name}</code>
@@ -225,7 +223,7 @@ EMPLOYEE_DELETE = f"""После подтверждения действия, с
 Вы действительно хотите удалить сотрудника
 <code>{{full_name}}</code>?"""
 
-EMPLOYEE_INVITE = f"""Приглашаю вас в аккаунт сотрудника.
+EMPLOYEE_INVITE_LETTER = f"""Приглашаю вас в аккаунт сотрудника.
 Присоединяйтесь, перейдя по ссылке: {{invite_link}}
 
 ❗️  Ссылка действует только один раз! После входа в аккаунт вам будет выдан постоянный ключ."""
@@ -267,8 +265,11 @@ EMPLOYEE__EDIT_EMAIL__EMAIL_ERROR = f"""<b>Ошибка!</b> Email должен 
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-
 # Trainings
+TRAINING_IS_STARTED_ERROR = """Ошибка! Необходимо остановить курс."""
+
+TRAINING_IS_NOT_STARTED_ERROR = """Ошибка! Необходимо запустить курс."""
+
 TRAININGS_ITEM = """<b>{index}</b>  <b>{title}</b>
 {status} | {student_counter}"""
 
@@ -283,41 +284,53 @@ TRAININGS__UNAVAILABLE = """У вас нет доступа к курсам."""
 
 TRAINING_STATUS__INACTIVE = """<i>Не запущен</i>"""
 TRAINING_STATUS__ACTIVE = """<b>Активный</b>"""
-TRAINING_STATUS__COMPLETED = """<b>Завершен</b>"""
 
 CREATE_TRAINING__NAME = f"""Введите название нового курса.
 (Рекомендуемая длинна: 2-3 слова)
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-
 CREATE_TRAINING__ROLE = f"""Выберите роль, которой будет привязан курс.
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-
 CREATE_TRAINING__ROLE__SELECTED = f"""Выберите роль, которой будет привязан курс.
 
 Выбрана роль '<code>{{role_name}}</code>'."""
-
 
 CREATE_TRAINING__CREATED = f"""Новый курс успешно создан."""
 
 TRAINING__NOT_FOUND = """Курс не найден."""
 
 TRAINING = """<code>{name}</code>
-Уровней:  <code>{level_counter}</code>
-
-Статус:  <i>{status}</i>
-Дата создания:  <code>{data_create}</code>
-Учеников:  <code>{students_counter}</code>"""
+Статус:  {status}
+Дата создания:  <code>{data_create}</code>"""
 
 TRAINING__DELETED = """Курс успешно удален."""
+
+TRAINING__STARTED = """Курс успешно запущен."""
+
+TRAINING__STARTED__ERROR__ALREADY_STARTED = """Ошибка! Курс уже запущен."""
+
+TRAINING__STARTED__ERROR__NOT_STARTED = """Ошибка! Курс не запущен."""
+
+TRAINING__STOPPED = """Курс успешно остановлен."""
 
 TRAINING__DELETE = f"""После подтверждения действия, курс будет навсегда удален!
 —
 Вы действительно хотите удалить курс
-<code>{{training_name}}</code>?"""
+'<code>{{training_name}}</code>'?"""
+
+TRAINING__START = f"""После подтверждения действия, курс будет недоступен для изменения! 
+<b>Все ученики будут удалены!</b>
+—
+Вы действительно хотите запустить курс
+'<code>{{training_name}}</code>'?"""
+
+TRAINING__STOP = f"""После подтверждения действия, курс будет остновлен, а ученики больше не смогут проходить его!
+—
+Вы действительно хотите остановить курс
+'<code>{{training_name}}</code>'?"""
 
 TRAINING__EDIT_NAME = f"""Введите новое название для курса.
 (Рекомендуемая длинна: 2-3 слова)
@@ -360,8 +373,7 @@ TRAINING__LEVELS = f"""Список уровней курса '<code>{{training_
 —
 Выберите уровень."""
 
-
-CREATE_LEVEL__TITLE = f"""Введите заголовок для нового уровня.
+ENTER__LEVEL__TITLE = f"""Введите заголовок для уровня.
 (Рекомендуемая длинна: 2-3 слова)
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
@@ -371,23 +383,30 @@ CREATE_LEVEL__TITLE__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Неко
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-ALLOW_CONTENT_TYPE_HELPER = f"""{code(TRAININGS__LEVELS__ITEM__TYPE__QUIZ)}:  <i>{CONTENT_TYPE__POLL__QUIZ}</i>
+ALLOW_LEVEL_CONTENT_TYPE_HELPER = f"""{code(TRAININGS__LEVELS__ITEM__TYPE__QUIZ)}:  <i>{CONTENT_TYPE__POLL__QUIZ}</i>
 {code(TRAININGS__LEVELS__ITEM__TYPE__INFO)}:  <i>{CONTENT_TYPE__MEDIA_GROUP} (до 10 элементов)</i>, <i>{CONTENT_TYPE__TEXT}</i>, <i>{CONTENT_TYPE__PHOTO}</i>, <i>{CONTENT_TYPE__VIDEO}</i>, <i>{CONTENT_TYPE__DOCUMENT}</i>, <i>{CONTENT_TYPE__AUDIO}</i>, <i>{CONTENT_TYPE__STICKER}</i>, <i>{CONTENT_TYPE__ANIMATION}</i>, <i>{CONTENT_TYPE__CONTACT}</i>, <i>{CONTENT_TYPE__LOCATION}</i>"""
+
+ALLOW_TRAINING_START_CONTENT_TYPE_HELPER = f"""Вы можете прислать {italic(CONTENT_TYPE__TEXT)} или {italic(CONTENT_TYPE__PHOTO)} (для первью)."""
 
 CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат контента. Попробуйте еще раз.
 
-{ALLOW_CONTENT_TYPE_HELPER}
+{ALLOW_LEVEL_CONTENT_TYPE_HELPER}
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-CREATE_LEVEL__CONTENT = f"""Пришлите контент для уровня <b>одним сообщением</b>.
 
-{ALLOW_CONTENT_TYPE_HELPER}
+ENTER__LEVEL_CONTENT = f"""Пришлите контент для уровня <b>одним сообщением</b>.
+
+{ALLOW_LEVEL_CONTENT_TYPE_HELPER}
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
 
 CREATE_LEVEL__SUCCESS = f"""Новый уровень успешно создан!"""
+
+EDIT_CONTENT_LEVEL__SUCCESS = f"""Контент уровня успешно изменен!"""
+
+EDIT_TITLE_LEVEL__SUCCESS = f"""Заголовок уровня успешно изменен!"""
 
 LEVEL__NOT_FOUND = f"""Уровень не найден."""
 
@@ -398,14 +417,11 @@ LEVEL = f"""<code>{{training_name}}</code>  :  <code>{{level_name}}</code>
 Тип уровня:  {{level_type_icon}} <code>{{level_type}}</code>
 Тип контента:  <code>{{content_type}}</code>"""
 
-
-LEVEL__START = f"""{TRAININGS__LEVELS__ITEM__TYPE__START_I}  Начальное сообщение
+TRAINING__START_LEVEL = f"""{TRAININGS__LEVELS__ITEM__TYPE__START_I}  Начальное сообщение
 Курс:  <code>{{training_name}}</code>
+Превью:  {{has_preview}}
 
-Сообщение будет показано в самом начале обучения. Поприветствуйте ученика и расскажите ему про данный курс.
-—
-{{html_text}}"""
-
+<i>Сообщение будет показано в самом начале обучения. Поприветствуйте ученика и расскажите ему про данный курс.</i>"""
 
 LEVEL__DELETE = f"""После подтверждения действия, уровень будет навсегда удален!
 —
@@ -417,6 +433,49 @@ LEVEL__DELETED = f"""✅  Уровень '{{level_name}}' успешно уда�
 LEVEL__NO_TEXT = "<i>(Текст отсутствует)</i>"
 
 LEVEL__START_TEXT_DEFAULT = """Добро пожаловать на курс."""
+
+TRAINING__START__EDIT__CONTENT = f"""Пришлите контент для начального сообщения <b>одним сообщением</b>.
+
+{ALLOW_TRAINING_START_CONTENT_TYPE_HELPER}
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+TRAINING__START__EDIT__CONTENT__ERROR__INCORRECT_FORMAT = f"""<b>Ошибка!</b> Некорректный формат контента. Попробуйте еще раз.
+
+{ALLOW_TRAINING_START_CONTENT_TYPE_HELPER}
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+TRAINING__START__EDIT__CONTENT__SUCCESS = f"""Контент начального сообщения успешно сменен!"""
+
+
+# Students
+STUDENT_ITEM = """<b>{index}</b>  <b>{full_name}</b>"""
+
+STUDENTS = f"""Список учеников курса '<code>{{training_name}}</code>'.
+—
+{{items}}
+—
+Выберите ученика или добавьте нового.
+"""
+
+STUDENTS__EMPTY = f"""Список учеников курса '<code>{{training_name}}</code>' пуст. Добавьте первого ученика."""
+
+STUDENTS__ENTER__FULL_NAME = f"""Введите <b>ФИО</b> ученика.
+Пример:  <code>Иванов Иван -</code>
+
+/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+
+CREATE_STUDENT__SUCCESS = f"""Аккаунт для ученика готов!
+
+Ключ доступа: <tg-spoiler>{{access_key}}</tg-spoiler>
+<code>{{access_link}}</code>
+
+Пригласите пользователя, нажав '<code>Пригласить</code>'."""
+
+
+STUDENT_INVITE_LETTER = f"""Приглашаю вас пройти курс '{{training_name}}'.
+Вы можете пройти его, пройдя по ссылке: {{invite_link}}."""
 
 
 # MyAccount
@@ -430,7 +489,6 @@ MY_ACCOUNT__ADMIN = f"""<b>Мой аккаунт</b>
 Имя:  <code>{{first_name}}</code>
 Отчество:  <code>{{patronymic}}</code>"""
 
-
 MY_ACCOUNT__EMPLOYEE = f"""<b>Мой аккаунт</b>
 Тип аккаунта: <code>{{account_type}}</code>
 Фамилия:  <code>{{last_name}}</code>
@@ -443,5 +501,3 @@ MY_ACCOUNT__EMPLOYEE = f"""<b>Мой аккаунт</b>
 
 def field(it: Optional[str]):
     return it if it else EMPTY_FIELD
-
-

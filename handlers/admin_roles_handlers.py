@@ -13,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import RoleNotUniqueNameError, NotFoundError, TokenNotValidError
 from data.asvttk_service.types import RoleData
-from handlers.handlers_delete import show_delete, DeleteItemCD
+from handlers.handlers_confirmation import show_confirmation, ConfirmationCD
 from handlers.handlers_list import ListItem, list_keyboard, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
@@ -101,8 +101,8 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.DELETE:
             role = await service.get_role_by_id(data.token, data.role_id)
             text = strings.ROLE_DELETE.format(role_name=role.name)
-            await show_delete(data.token, callback.message, deleted_item_id=data.role_id, text=text, tag=TAG_DELETE_ROLE,
-                              is_answer=False)
+            await show_confirmation(data.token, callback.message, item_id=data.role_id, text=text, tag=TAG_DELETE_ROLE,
+                                    is_answer=False)
             await state.update_data({UPDATED_MSG_ID: None})
         elif data.action == data.Action.RENAME:
             role = await service.get_role_by_id(data.token, data.role_id)
@@ -164,17 +164,17 @@ async def add_trainings_employee_callback(callback: CallbackQuery):
         await token_not_valid_error_for_callback(callback)
 
 
-@router.callback_query(DeleteItemCD.filter(F.tag == TAG_DELETE_ROLE))
+@router.callback_query(ConfirmationCD.filter(F.tag == TAG_DELETE_ROLE))
 async def delete_role_callback(callback: CallbackQuery):
-    data = DeleteItemCD.unpack(callback.data)
+    data = ConfirmationCD.unpack(callback.data)
     try:
-        if data.is_delete:
-            role = await service.get_role_by_id(data.token, data.deleted_item_id)
-            await service.delete_role(data.token, data.deleted_item_id)
+        if data.is_agree:
+            role = await service.get_role_by_id(data.token, data.item_id)
+            await service.delete_role(data.token, data.item_id)
             await show_roles(data.token, callback.message, is_answer=False)
             await callback.answer(text=strings.ROLE_DELETED.format(role_name=role.name))
         else:
-            await show_role(data.token, data.deleted_item_id, callback.message)
+            await show_role(data.token, data.item_id, callback.message)
             await callback.answer()
     except NotFoundError:
         await callback.answer(text=strings.ROLE__NOT_FOUND)

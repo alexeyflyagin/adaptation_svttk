@@ -20,7 +20,7 @@ router = Router()
 
 @router.message(MainStates.ADMIN, Command(commands.MYACCOUNT))
 @router.message(MainStates.EMPLOYEE, Command(commands.MYACCOUNT))
-@router.message(MainStates.STUDENT, Command(commands.MYACCOUNT))
+# @router.message(MainStates.STUDENT, Command(commands.MYACCOUNT))
 async def my_account_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:

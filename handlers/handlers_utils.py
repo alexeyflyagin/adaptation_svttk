@@ -7,7 +7,7 @@ from data.asvttk_service.models import AccountType
 from src import strings
 from src.states import MainStates
 from data.asvttk_service import asvttk_service as service
-from src.utils import get_input_media_by_level_type, CONTENT_TYPE__MEDIA_GROUP
+from src.utils import get_input_media_by_level_type
 
 
 async def reset_state(state: FSMContext):
@@ -41,7 +41,7 @@ async def token_not_valid_error_for_callback(callback: CallbackQuery):
     await callback.message.edit_reply_markup(inline_message_id=None)
 
 
-async def send_level(c_msg: Message, msgs: list[Message]) -> Message:
+async def send_msg(c_msg: Message, msgs: list[Message]) -> Message:
     if len(msgs) == 0:
         raise ValueError()
     if len(msgs) == 1:
@@ -139,7 +139,7 @@ def get_content_text(msgs: [Message]):
         raise ValueError()
     msg = msgs[0]
     content_text = msg.text if msg.text else msg.caption
-    content_text = content_text if content_text else strings.LEVEL__NO_TEXT
+    content_text = content_text if content_text else None
     if msg.content_type == ContentType.POLL:
         content_text = msg.poll.question
     return content_text

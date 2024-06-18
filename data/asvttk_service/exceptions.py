@@ -3,7 +3,19 @@ class AccessError(Exception):
     pass
 
 
+class TrainingIsActiveError(Exception):
+    pass
+
+
+class TrainingIsNotActiveError(Exception):
+    pass
+
+
 class EmailValueError(Exception):
+    pass
+
+
+class TrainingStateError(Exception):
     pass
 
 

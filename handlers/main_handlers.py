@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from data.asvttk_service.models import AccountType
 from handlers import admin_roles_handlers, last_handlers, admin_employees_handlers, trainings_handlers, \
     my_account_handlers
 from handlers.handlers_utils import reset_state
@@ -17,7 +18,8 @@ from custom_storage import TOKEN
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
-    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, MainStates
+    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, MainStates, \
+    TrainingStartEditStates, LevelEditStates, StudentCreateState
 from src.utils import get_access_key_link, START_SESSION_MSG_ID
 
 router = Router()
@@ -78,7 +80,7 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
             await wait_msg.delete()
         await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
         await reset_state(state)
-        if log_in_data.is_first:
+        if log_in_data.is_first and account.type != AccountType.STUDENT:
             text = strings.LOG_IN__SUCCESS__FIRST
             keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)
             await msg.answer(text, reply_markup=keyboard)
@@ -92,7 +94,7 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
 async def log_in_data_callback(callback: CallbackQuery):
     data = LogInDataCD.unpack(callback.data)
     if data.action == data.Action.READ_IT:
-        text = strings.LOG_IN__DATA__PINED.format(first_name=data.first_name, access_key=data.access_key)
+        text = strings.LOG_IN__DATA.format(first_name=data.first_name, access_key=data.access_key)
         keyboard = get_log_in_data_keyboard(first_name=data.first_name, access_key=data.access_key, has_pin=False)
         await callback.message.answer(text, reply_markup=keyboard)
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -107,6 +109,9 @@ async def log_in_data_callback(callback: CallbackQuery):
 @router.message(EmployeeCreateStates(), Command(commands.CANCEL))
 @router.message(TrainingCreateStates(), Command(commands.CANCEL))
 @router.message(LevelCreateStates(), Command(commands.CANCEL))
+@router.message(TrainingStartEditStates(), Command(commands.CANCEL))
+@router.message(StudentCreateState(), Command(commands.CANCEL))
+@router.message(LevelEditStates(), Command(commands.CANCEL))
 async def cancel_handler(msg: Message, state: FSMContext):
     await reset_state(state)
     await msg.answer(strings.ACTION_CANCELED)

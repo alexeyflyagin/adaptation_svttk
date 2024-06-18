@@ -13,16 +13,29 @@ class EmployeeCreateStates(StatesGroup):
 
 
 class EmployeeEditEmailStates(StatesGroup):
-    EditEmail = State()
+    EDIT_EMAIL = State()
 
 
 class LevelCreateStates(StatesGroup):
-    Title = State()
-    Content = State()
+    TITLE = State()
+    CONTENT = State()
+
+
+class StudentCreateState(StatesGroup):
+    FULL_NAME = State()
+
+
+class TrainingStartEditStates(StatesGroup):
+    CONTENT = State()
+
+
+class LevelEditStates(StatesGroup):
+    TITLE = State()
+    CONTENT = State()
 
 
 class EmployeeEditFullNameStates(StatesGroup):
-    EditFullName = State()
+    EDIT_FULL_NAME = State()
 
 
 class RoleCreateStates(StatesGroup):

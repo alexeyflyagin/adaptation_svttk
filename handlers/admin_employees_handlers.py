@@ -12,14 +12,17 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service.exceptions import TokenNotValidError, InitialsValueError, NotFoundError, EmailValueError
 from data.asvttk_service import asvttk_service as service
+from data.asvttk_service.models import AccountType
 from data.asvttk_service.types import EmployeeData
-from handlers.handlers_delete import show_delete, DeleteItemCD
+from handlers.handlers_confirmation import show_confirmation, ConfirmationCD
 from handlers.handlers_list import list_keyboard, get_pages, ListItem, get_items_by_page, ListCD, get_safe_page_index
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state
 from src import commands, strings
+from src.keyboards import invite_keyboard
 from src.states import MainStates, EmployeeCreateStates, EmployeeEditEmailStates, EmployeeEditFullNameStates
 from src.strings import code
-from src.utils import get_full_name_by_account, get_access_key_link, show, UPDATED_MSG, UPDATED_ITEM_ID
+from src.utils import get_full_name_by_account, get_access_key_link, show, UPDATED_MSG, UPDATED_ITEM_ID, \
+    get_initials_from_text
 
 router = Router()
 
@@ -66,14 +69,6 @@ def employee_keyboard(token: str, page_index: int, employee_id: Optional[int] = 
     return kbb.as_markup()
 
 
-def invite_keyboard(first_name: str, access_key: str):
-    kbb = InlineKeyboardBuilder()
-    text = strings.EMPLOYEE_INVITE.format(first_name=first_name, invite_link=get_access_key_link(access_key))
-    query = SwitchInlineQueryChosenChat(query=text, allow_user_chats=True)
-    kbb.row(InlineKeyboardButton(text=strings.BTN_INVITE, switch_inline_query_chosen_chat=query), width=1)
-    return kbb.as_markup()
-
-
 @router.message(MainStates.ADMIN, Command(commands.EMPLOYEES))
 async def employees_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
@@ -107,25 +102,17 @@ async def list_callback(callback: CallbackQuery, state: FSMContext):
         await token_not_valid_error_for_callback(callback)
 
 
-def get_initials_from_text(text: str) -> list[str]:
-    initials = [i.replace(" ", "") for i in text.split()]
-    if len(initials) != 3 or initials[1] == '-':
-        raise InitialsValueError()
-    return initials
-
-
 @router.message(EmployeeCreateStates.FULL_NAME)
 async def create_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     if msg.content_type != ContentType.TEXT:
-        await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)
+        await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
         return
     try:
-        initials = get_initials_from_text(msg.text)
+        initials = get_initials_from_text(msg.text, has_none=True)
         acc_data = await service.create_employee(token, first_name=initials[1], last_name=initials[0],
                                                  patronymic=initials[2])
-        account = await service.get_employee_by_id(token, acc_data.account_id)
-        keyboard = invite_keyboard(account.first_name, acc_data.access_key)
+        keyboard = invite_keyboard(AccountType.EMPLOYEE, acc_data.access_key)
         await msg.answer(strings.CREATE_EMPLOYEE__SUCCESS.format(
             access_key=acc_data.access_key,
             access_link=get_access_key_link(acc_data.access_key)), reply_markup=keyboard)
@@ -134,7 +121,7 @@ async def create_employee_handler(msg: Message, state: FSMContext):
             await show_employees(token, msg, edited_msg_id=updated_msg[0], page_index=updated_msg[1])
         await reset_state(state)
     except InitialsValueError:
-        await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)
+        await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
 
@@ -148,19 +135,19 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_employees(data.token, callback.message, page_index=data.page_index, is_answer=False)
         if data.action == data.Action.EDIT_EMAIL:
-            await state.set_state(EmployeeEditEmailStates.EditEmail)
+            await state.set_state(EmployeeEditEmailStates.EDIT_EMAIL)
             await callback.message.answer(strings.EMPLOYEE__EDIT_EMAIL)
             await state.update_data({UPDATED_ITEM_ID: data.employee_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         elif data.action == data.Action.DELETE:
             employee = await service.get_employee_by_id(data.token, data.employee_id)
             text = strings.EMPLOYEE_DELETE.format(full_name=get_full_name_by_account(employee, full_patronymic=True))
-            await show_delete(data.token, callback.message, args=data.page_index, deleted_item_id=data.employee_id,
-                              text=text, tag="employee", is_answer=False)
+            await show_confirmation(data.token, callback.message, args=data.page_index, item_id=data.employee_id,
+                                    text=text, tag="employee", is_answer=False)
         elif data.action == data.Action.ROLES:
             await show_edit_roles(data.token, data.employee_id, callback.message, is_answer=False)
         elif data.action == data.Action.EDIT_FN:
-            await state.set_state(EmployeeEditFullNameStates.EditFullName)
+            await state.set_state(EmployeeEditFullNameStates.EDIT_FULL_NAME)
             await callback.message.answer(strings.EMPLOYEE__EDIT_FULL_NAME)
             await state.update_data({UPDATED_ITEM_ID: data.employee_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
@@ -172,18 +159,18 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
         await token_not_valid_error_for_callback(callback)
 
 
-@router.callback_query(DeleteItemCD.filter(F.tag == "employee"))
+@router.callback_query(ConfirmationCD.filter(F.tag == "employee"))
 async def delete_employee_callback(callback: CallbackQuery):
-    data = DeleteItemCD.unpack(callback.data)
+    data = ConfirmationCD.unpack(callback.data)
     page_index = int(data.args)
     try:
         await service.token_validate(data.token)
-        if data.is_delete:
-            await service.delete_employee(data.token, employee_id=data.deleted_item_id)
+        if data.is_agree:
+            await service.delete_employee(data.token, employee_id=data.item_id)
             await callback.answer(text=strings.EMPLOYEE__DELETED)
             await show_employees(data.token, callback.message, page_index=page_index, is_answer=False)
         else:
-            await show_employee(data.token, data.deleted_item_id, callback.message, page_index=page_index,
+            await show_employee(data.token, data.item_id, callback.message, page_index=page_index,
                                 is_answer=False)
             await callback.answer()
     except NotFoundError:
@@ -244,7 +231,7 @@ async def add_roles_employee_callback(callback: CallbackQuery, state: FSMContext
         await token_not_valid_error_for_callback(callback)
 
 
-@router.message(EmployeeEditEmailStates.EditEmail)
+@router.message(EmployeeEditEmailStates.EDIT_EMAIL)
 async def edit_email_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
@@ -265,11 +252,11 @@ async def edit_email_employee_handler(msg: Message, state: FSMContext):
         await token_not_valid_error(msg, state)
 
 
-@router.message(EmployeeEditFullNameStates.EditFullName)
+@router.message(EmployeeEditFullNameStates.EDIT_FULL_NAME)
 async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     if msg.content_type != ContentType.TEXT:
-        await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)
+        await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
         return
     try:
         initials = get_initials_from_text(msg.text)
@@ -283,7 +270,7 @@ async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
             await show_employee(token, employee_id, msg, update_msg[1], update_msg[0])
         await reset_state(state)
     except InitialsValueError:
-        await msg.answer(strings.CREATE_EMPLOYEE__ERROR_FORMAT)
+        await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
     except NotFoundError:
         await msg.answer(text=strings.EMPLOYEE__NOT_FOUND)
         await reset_state(state)
