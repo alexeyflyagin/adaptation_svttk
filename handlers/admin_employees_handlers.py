@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -116,10 +117,11 @@ async def create_employee_handler(msg: Message, state: FSMContext):
         await msg.answer(strings.CREATE_EMPLOYEE__SUCCESS.format(
             access_key=acc_data.access_key,
             access_link=get_access_key_link(acc_data.access_key)), reply_markup=keyboard)
+        await reset_state(state)
+        await asyncio.sleep(3)
         updated_msg: Optional[list] = (await state.get_data()).get(UPDATED_MSG, None)
         if updated_msg:
             await show_employees(token, msg, edited_msg_id=updated_msg[0], page_index=updated_msg[1])
-        await reset_state(state)
     except InitialsValueError:
         await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
     except TokenNotValidError:

@@ -36,7 +36,7 @@ async def get_token(state: FSMContext):
 
 
 async def token_not_valid_error(msg: Message, state: FSMContext):
-    await log_out(msg, state, log_out_text=strings.SESSION_ERROR, delete_current_msg=True)
+    await log_out(msg, state, log_out_text=strings.SESSION_ERROR)
 
 
 async def token_not_valid_error_for_callback(callback: CallbackQuery, state: FSMContext):

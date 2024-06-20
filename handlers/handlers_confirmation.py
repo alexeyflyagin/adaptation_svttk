@@ -14,13 +14,15 @@ class ConfirmationCD(CallbackData, prefix="confirmation"):
     is_agree: bool
     item_id: int
     args: Optional[Any] = None
+    arg1: Optional[Any] = None
 
 
-def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None):
+def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None,
+                          arg1: Optional[Any] = None):
     kbb = InlineKeyboardBuilder()
     kbb.adjust(1)
-    btn_yes_data = ConfirmationCD(token=token, tag=tag, is_agree=True, args=args, item_id=item_id).pack()
-    btn_no_data = ConfirmationCD(token=token, tag=tag, is_agree=False, args=args, item_id=item_id).pack()
+    btn_yes_data = ConfirmationCD(token=token, tag=tag, is_agree=True, args=args, arg1=arg1, item_id=item_id).pack()
+    btn_no_data = ConfirmationCD(token=token, tag=tag, is_agree=False, args=args, arg1=arg1, item_id=item_id).pack()
     btn_yes = InlineKeyboardButton(text=strings.BTN_DELETE_YES, callback_data=btn_yes_data)
     btn_no = InlineKeyboardButton(text=strings.BTN_DELETE_NO, callback_data=btn_no_data)
     btn_no_1 = InlineKeyboardButton(text=strings.BTN_DELETE_NO_1, callback_data=btn_no_data)
@@ -32,9 +34,25 @@ def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any
     return kbb.as_markup()
 
 
+def simple_confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None,
+                                 arg1: Optional[Any] = None):
+    kbb = InlineKeyboardBuilder()
+    btn_yes_data = ConfirmationCD(token=token, tag=tag, is_agree=True, args=args, arg1=arg1, item_id=item_id).pack()
+    btn_no_data = ConfirmationCD(token=token, tag=tag, is_agree=False, args=args, arg1=arg1, item_id=item_id).pack()
+    buttons = [InlineKeyboardButton(text=strings.BTN_DELETE_NO, callback_data=btn_no_data),
+               InlineKeyboardButton(text=strings.BTN_DELETE_YES, callback_data=btn_yes_data)]
+    random.shuffle(buttons)
+    kbb.add(*buttons)
+    kbb.adjust(2)
+    return kbb.as_markup()
+
+
 async def show_confirmation(token: str, msg: Message, item_id: int, text: str, tag: str,
-                            is_answer: bool = True, args: Optional[Any] = None):
-    keyboard = confirmation_keyboard(token, tag, item_id=item_id, args=args)
+                            is_answer: bool = True, args: Optional[Any] = None, arg1: Optional[Any] = None,
+                            simple: bool = False):
+    keyboard = confirmation_keyboard(token, tag, item_id=item_id, args=args, arg1=arg1)
+    if simple:
+        keyboard = simple_confirmation_keyboard(token, tag, item_id, args, arg1)
     if is_answer:
         await msg.answer(text, reply_markup=keyboard)
     else:

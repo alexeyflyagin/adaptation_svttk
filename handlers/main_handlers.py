@@ -1,78 +1,55 @@
+import asyncio
+
 from aiogram import Router
 from aiogram.filters import CommandObject, Command
-from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import Message
 
+from custom_storage import TOKEN
 from data.asvttk_service.models import AccountType
-from handlers import student_handlers
-from handlers.handlers_utils import reset_state, log_out
-from handlers.last_handlers import help_handler
+from handlers.authorization_handlers import show_warning, log_in
+from handlers.handlers_utils import reset_state, delete_msg
 from src import strings, commands
 from data.asvttk_service import asvttk_service as service
-from data.asvttk_service.exceptions import KeyNotFoundError
+from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
     TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, \
     TrainingStartEditStates, LevelEditStates, StudentCreateState
-from src.utils import get_access_key_link
+
 
 router = Router()
 
 
-class LogInDataCD(CallbackData, prefix='log_in_data'):
-    first_name: str
-    access_key: str
-    action: int
-
-    class Action:
-        READ_IT = 0
-
-
-def get_log_in_data_keyboard(first_name: str, access_key: str, has_pin: bool = True, has_log_in: bool = True):
-    kbb = InlineKeyboardBuilder()
-    if has_pin:
-        btn_read_it_data = LogInDataCD(first_name=first_name, access_key=access_key, action=LogInDataCD.Action.READ_IT)
-        kbb.add(InlineKeyboardButton(text=strings.BTN_READ_IT, callback_data=btn_read_it_data.pack()))
-    if has_log_in:
-        url = get_access_key_link(access_key=access_key)
-        kbb.add(InlineKeyboardButton(text=strings.BTN_LOG_IN, url=url))
-    kbb.adjust(1, 1)
-    return kbb.as_markup()
-
-
 @router.message(Command(commands.START))
 async def start_handler(msg: Message, state: FSMContext, command: CommandObject):
+    await msg.delete()
     if not command.args:
-        await msg.answer(strings.LOG_IN__NO_ACCESS_KEY)
+        bot_text = await msg.answer(strings.LOG_IN__NO_ACCESS_KEY)
+        await asyncio.sleep(3)
+        await delete_msg(bot_text.bot, bot_text.chat.id, bot_text.message_id)
         return
-    user_id = msg.from_user.id
+    access_key = command.args
     try:
-        log_in_data = await service.log_in(user_id, key=command.args)
-        account = await service.get_account_by_id(log_in_data.token)
-        await log_out(msg, state, new_token=log_in_data.token)
-        await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
-        if log_in_data.is_first and account.type != AccountType.STUDENT:
-            text = strings.LOG_IN__SUCCESS__FIRST
-            keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)
-            await msg.answer(text, reply_markup=keyboard)
-        elif account.type == AccountType.STUDENT:
-            await student_handlers.show_start(log_in_data.token, msg, state)
-        else:
-            await help_handler(msg, state)
+        await service.check_access_key(access_key)
+        state_data = await state.get_data()
+        token = state_data.get(TOKEN, None)
+        try:
+            if token is None:
+                raise TokenNotValidError()
+            account = await service.get_account_by_token(token)
+            if account.type == AccountType.STUDENT:
+                await show_warning(msg, access_key, strings.LOG_IN__WARNING__STUDENT)
+                return
+            else:
+                await show_warning(msg, access_key, strings.LOG_IN__WARNING)
+                return
+        except TokenNotValidError:
+            pass
+        await log_in(msg, msg.from_user.id, state, access_key)
     except KeyNotFoundError:
-        await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
-
-
-@router.callback_query(LogInDataCD.filter())
-async def log_in_data_callback(callback: CallbackQuery):
-    data = LogInDataCD.unpack(callback.data)
-    if data.action == data.Action.READ_IT:
-        text = strings.LOG_IN__DATA.format(first_name=data.first_name, access_key=data.access_key)
-        keyboard = get_log_in_data_keyboard(first_name=data.first_name, access_key=data.access_key, has_pin=False)
-        await callback.message.answer(text, reply_markup=keyboard)
-        await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.answer()
+        bot_text = await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
+        await asyncio.sleep(3)
+        await delete_msg(bot_text.bot, bot_text.chat.id, bot_text.message_id)
 
 
 @router.message(RoleCreateStates(), Command(commands.CANCEL))

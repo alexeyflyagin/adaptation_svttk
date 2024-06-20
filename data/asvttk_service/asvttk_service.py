@@ -109,6 +109,15 @@ async def log_out(token: str):
 
 
 @typechecked
+async def check_access_key(access_key: str):
+    async with database.session_factory() as s:
+        query = await s.execute(select(KeyOrm).filter(KeyOrm.access_key == access_key))
+        key = query.scalars().first()
+        if not key:
+            raise KeyNotFoundError
+
+
+@typechecked
 async def log_in(user_id: int, key: str) -> types.LogInData:
     async with database.session_factory() as s:
         key_orm = await __get_first_where(s, KeyOrm, KeyOrm.access_key == key, exception=KeyNotFoundError())
@@ -371,7 +380,7 @@ async def get_all_roles(token: str, account_id: Optional[int] = None) -> list[Ro
             account_id = token_data.account.id
         if account_id:
             query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.roles))
-                                    .filter(AccountOrm.id == account_id))
+                                    .filter(AccountOrm.id == account_id).order_by(RoleOrm.date_create))
             account = query.scalars().first()
             if not account:
                 raise NotFoundError
@@ -379,7 +388,7 @@ async def get_all_roles(token: str, account_id: Optional[int] = None) -> list[Ro
                 raise ValueError("Only for employees")
             roles = [role_orm_to_role_data(i) for i in account.roles]
         else:
-            query = await s.execute(select(RoleOrm).order_by(RoleOrm.date_create))
+            query = await s.execute(select(RoleOrm).order_by(RoleOrm.date_create).order_by(RoleOrm.date_create))
             roles = [role_orm_to_role_data(i) for i in query.scalars().all()]
         return roles
 
@@ -498,9 +507,11 @@ async def get_all_trainings(token: str):
                                     .join(TrainingAndRoleOrm, TrainingOrm.id == TrainingAndRoleOrm.training_id)
                                     .join(RoleOrm, TrainingAndRoleOrm.role_id == RoleOrm.id)
                                     .join(RoleAndAccountOrm, RoleOrm.id == RoleAndAccountOrm.role_id)
-                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id))
+                                    .filter(RoleAndAccountOrm.account_id == token_data.account.id)
+                                    .order_by(TrainingOrm.date_create))
         else:
-            query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students)))
+            query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students))
+                                    .order_by(TrainingOrm.date_create))
         trainings = query.scalars().unique().all()
         trainings_data = []
         for i in trainings:

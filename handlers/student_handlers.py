@@ -183,6 +183,4 @@ async def show_next_keyboard(token: str, msg: Message, progress: Optional[Studen
         progress = await service.get_student_progress(token)
     keyboard = next_keyboard(token, progress.current_level.id, progress.current_level.type)
     text = strings.TRAINING_PROGRESS__NEXT__INFO
-    if progress.current_level.type == LevelType.QUIZ:
-        text = strings.TRAINING_PROGRESS__NEXT__QUIZ
     await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
