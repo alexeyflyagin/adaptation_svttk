@@ -1,9 +1,16 @@
 import dataclasses
+from enum import Enum
 from typing import Optional
 
 from aiogram.types import Message
 
-from data.asvttk_service.models import AccountType, LevelType
+from data.asvttk_service.models import AccountType
+
+
+class StudentProgressState(Enum):
+    START = 0
+    LEVEL = 1
+    COMPLETED = 2
 
 
 @dataclasses.dataclass
@@ -76,11 +83,22 @@ class RoleData:
 
 @dataclasses.dataclass
 class EmployeeData(AccountData):
-    roles: list[RoleData]
+    roles: Optional[list[RoleData]]
 
 
 @dataclasses.dataclass
 class StudentData(AccountData):
+    training: Optional[TrainingData]
+    answers: Optional[list["LevelAnswerData"]]
+
+
+@dataclasses.dataclass
+class StudentProgressData:
+    is_access: bool
+    student: StudentData
+    progress_state: StudentProgressState
+    current_level: Optional["LevelData"]
+    answers: list["LevelAnswerData"]
     training: TrainingData
 
 
@@ -96,4 +114,18 @@ class LevelData:
     title: str
     messages: list[Message]
     training: Optional[TrainingData]
+    answers: Optional["LevelAnswerData"]
+
+
+@dataclasses.dataclass
+class LevelAnswerData:
+    id: int
+    date_create: int
+    account_id: int
+    level_id: int
+    answer_option_ids: Optional[list[int]]
+    is_correct: Optional[bool]
+    level: LevelData
+    student: StudentData
+
 

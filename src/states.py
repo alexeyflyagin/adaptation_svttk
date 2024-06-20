@@ -2,6 +2,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 
 class MainStates(StatesGroup):
+    WAIT = State()
     CLEAR_PREVIOUS_SESSION = State()
     ADMIN = State()
     EMPLOYEE = State()

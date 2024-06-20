@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from asyncio import CancelledError
 
 from aiogram import Bot, Dispatcher
@@ -9,7 +8,8 @@ from aiogram_album.no_check_count_middleware import WithoutCountCheckAlbumMiddle
 import config
 from custom_storage import CustomStorage
 from data.asvttk_service.database import database
-from handlers import main_handlers
+from handlers import main_handlers, trainings_handlers, admin_roles_handlers, my_account_handlers, \
+    admin_employees_handlers, student_handlers, last_handlers
 from config import settings
 
 
@@ -20,7 +20,10 @@ async def main():
     storage = CustomStorage(ignore_users_id=[bot.id])
     dispatcher = Dispatcher(storage=storage)
     WithoutCountCheckAlbumMiddleware(router=dispatcher, latency=0.5)
-    dispatcher.include_router(main_handlers.router)
+    dispatcher.include_routers(main_handlers.router, trainings_handlers.router, admin_roles_handlers.router,
+                               my_account_handlers.router, admin_employees_handlers.router, student_handlers.router,
+                               last_handlers.router)
+    student_handlers.bot = bot
     try:
         await bot.set_my_commands(config.BOT_COMMANDS)
         await database.connect(drop_all="ye")

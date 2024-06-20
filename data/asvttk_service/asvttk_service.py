@@ -12,13 +12,14 @@ from data.asvttk_service import types
 from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
     KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, TrainingStateError, \
-    TrainingIsActiveError, TrainingIsNotActiveError
+    TrainingIsActiveError, TrainingIsNotActiveError, LevelAnswerAlreadyExistsError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
-    training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data
+    training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data, \
+    level_answer_orm_to_level_answer_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
-    TrainingAndRoleOrm, RoleAndAccountOrm, LevelOrm
+    TrainingAndRoleOrm, RoleAndAccountOrm, LevelOrm, LevelAnswerOrm, LevelType
 from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData, \
-    StudentData
+    StudentData, LevelAnswerData, StudentProgressData, StudentProgressState
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
     empty_check, get_current_time
 from src import strings
@@ -62,6 +63,14 @@ async def __check_has_training(s: AsyncSession, training_id: int, employee_id: i
         raise AccessError()
 
 
+async def __check_training(s: AsyncSession, training_id: int, student_id: int):
+    query = await s.execute(select(AccountOrm).filter(AccountOrm.type == AccountType.STUDENT,
+                                                      AccountOrm.id == student_id))
+    student = query.scalars().first()
+    if student.training_id != training_id:
+        raise AccessError()
+
+
 @typechecked
 async def token_validate(token: Optional[str]):
     if not token:
@@ -90,12 +99,13 @@ async def log_in(user_id: int, key: str) -> types.LogInData:
             except TokenNotValidError as _:
                 pass
         is_first = key_orm.is_first_log_in
-        token = generate_session_token()
-        new_session_orm = SessionOrm(key_id=key_orm.id, token=token, user_id=user_id)
-        s.add(new_session_orm)
         if is_first:
             key_orm.access_key = generate_access_key()
             key_orm.is_first_log_in = False
+        await s.commit()
+        token = generate_session_token()
+        new_session_orm = SessionOrm(key_id=key_orm.id, token=token, user_id=user_id)
+        s.add(new_session_orm)
         access_key = key_orm.access_key
         account_id = key_orm.account_id
         account_orm: AccountOrm = await __get_first_where(s, AccountOrm, AccountOrm.id == account_id)
@@ -139,7 +149,7 @@ async def get_all_employees(token: str) -> list[EmployeeData]:
 async def get_employee_by_id(token: str, employee_id: int) -> EmployeeData:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type is [AccountType.ADMIN, AccountType.EMPLOYEE]:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError
         if token_data.account.type == AccountType.EMPLOYEE and token_data.account.id != employee_id:
             raise AccessError
@@ -474,7 +484,7 @@ async def get_all_trainings(token: str):
         trainings = query.scalars().unique().all()
         trainings_data = []
         for i in trainings:
-            students = [account_orm_to_student_data(n, None) for n in i.students]
+            students = [account_orm_to_student_data(n, None, None) for n in i.students]
             trainings_data.append(training_orm_to_training_data(i, students, None))
         return trainings_data
 
@@ -490,15 +500,19 @@ async def get_training_by_id(token: str, training_id: int):
         training = query.scalars().first()
         if not training:
             raise NotFoundError()
-        students = [account_orm_to_student_data(i, None) for i in training.students]
-        levels = [level_orm_to_level_data(i, None, None) for i in training.levels]
+        students = [account_orm_to_student_data(i, None, None) for i in training.students]
+        levels = [level_orm_to_level_data(i, None, None, None) for i in training.levels]
         return training_orm_to_training_data(training, students, levels)
+
+
+def __training_is_started(training: TrainingOrm) -> bool:
+    return training.date_start and not training.date_end
 
 
 async def __training_is_started_check(s: AsyncSession, training_id: int):
     query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
     training = query.scalars().first()
-    if training.date_start and not training.date_end:
+    if __training_is_started(training):
         raise TrainingIsActiveError()
 
 
@@ -515,7 +529,7 @@ async def training_is_started_check(token: str, training_id: int):
 async def __training_is_not_started_check(s: AsyncSession, training_id: int):
     query = await s.execute(select(TrainingOrm).filter(TrainingOrm.id == training_id))
     training = query.scalars().first()
-    if not (training.date_start and not training.date_end):
+    if not __training_is_started(training):
         raise TrainingIsNotActiveError()
 
 
@@ -730,7 +744,7 @@ async def get_levels_by_training(token: str, training_id: int) -> list[LevelData
         levels_data = []
         for i in levels:
             training_data = training_orm_to_training_data(i.training, None, None)
-            levels_data.append(level_orm_to_level_data(i, levels.index(i) + 1, training_data))
+            levels_data.append(level_orm_to_level_data(i, levels.index(i) + 1, training_data, None))
         return levels_data
 
 
@@ -741,6 +755,7 @@ async def get_level_by_id(token: str, level_id: int) -> LevelData:
         if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
             raise AccessError()
         query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
+                                .options(joinedload(LevelOrm.answers))
                                 .filter(LevelOrm.id == level_id))
         level = query.scalars().unique().first()
         if not level:
@@ -752,7 +767,8 @@ async def get_level_by_id(token: str, level_id: int) -> LevelData:
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
         training_data = training_orm_to_training_data(level.training, None, None)
-        return level_orm_to_level_data(level, index + 1, training_data)
+        answers = [level_answer_orm_to_level_answer_data(i, None, None) for i in level.answers]
+        return level_orm_to_level_data(level, index + 1, training_data, answers=answers)
 
 
 # Students
@@ -775,14 +791,98 @@ async def create_student(token: str, training_id: int, first_name: str, last_nam
 async def get_student_by_id(token: str, student_id: int) -> StudentData:
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type is [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
             raise AccessError
         if token_data.account.type == AccountType.STUDENT and token_data.account.id != student_id:
             raise AccessError
         query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.training))
+                                .options(joinedload(AccountOrm.answers))
                                 .filter(AccountOrm.type == AccountType.STUDENT, AccountOrm.id == student_id))
         student = query.scalars().first()
         if not student:
             raise NotFoundError()
         training = training_orm_to_training_data(student.training, None, None)
-        return account_orm_to_student_data(student, training=training)
+        answers = [level_answer_orm_to_level_answer_data(i, None, None) for i in student.answers]
+        return account_orm_to_student_data(student, training=training, answers=answers)
+
+
+@typechecked
+async def get_student_progress(token: str, student_id: Optional[int] = None) -> StudentProgressData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
+            raise AccessError()
+        if token_data.account.type == AccountType.STUDENT and (not student_id):
+            student_id = token_data.account.id
+        if token_data.account.type == AccountType.STUDENT and student_id != token_data.account.id:
+            raise AccessError()
+        query = await s.execute(select(AccountOrm)
+                                .options(joinedload(AccountOrm.training))
+                                .options(joinedload(AccountOrm.answers).joinedload(LevelAnswerOrm.level))
+                                .filter(AccountOrm.type == AccountType.STUDENT, AccountOrm.id == student_id))
+        student = query.scalars().first()
+        if not student:
+            raise NotFoundError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, student.training_id, token_data.account.id)
+        is_access = __training_is_started(student.training)
+        all_levels = await __get_levels_sorted(s, student.training_id)
+        level_ids_by_answers = [i.level_id for i in student.answers]
+        not_completed_levels = [i for i in all_levels if i.id not in level_ids_by_answers]
+        progress_state = StudentProgressState.COMPLETED
+        current_level = None
+        if len(not_completed_levels) == len(all_levels):
+            progress_state = StudentProgressState.START
+            current_level = not_completed_levels[0]
+        elif not_completed_levels:
+            progress_state = StudentProgressState.LEVEL
+            current_level = not_completed_levels[0]
+        answers_data = [level_answer_orm_to_level_answer_data(i, None, None) for i in student.answers]
+        student_data = account_orm_to_student_data(student, None, None)
+        if current_level:
+            current_level_data = level_orm_to_level_data(current_level, None, None, None)
+        else:
+            current_level_data = None
+        all_level = [level_orm_to_level_data(i, None, None, None) for i in all_levels]
+        training_data = training_orm_to_training_data(student.training, None, all_level)
+        res = StudentProgressData(is_access=is_access, student=student_data, progress_state=progress_state,
+                                  current_level=current_level_data, answers=answers_data, training=training_data)
+        return res
+
+
+# LevelAnswer
+@typechecked
+async def create_level_answer(token: str, level_id: int,
+                              answer_option_ids: Optional[list[int]] = None) -> LevelAnswerData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.STUDENT]:
+            raise AccessError
+        query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level_id))
+        level = query.scalars().first()
+        if not level:
+            raise NotFoundError()
+        await __check_training(s, level.training_id, token_data.account.id)
+        query = await s.execute(select(LevelAnswerOrm).filter(LevelAnswerOrm.level_id == level_id,
+                                                              LevelAnswerOrm.account_id == token_data.account.id))
+        exist_level_answer = query.scalars().first()
+        if exist_level_answer:
+            raise LevelAnswerAlreadyExistsError()
+
+        if level.type == LevelType.QUIZ and answer_option_ids:
+            msg: Message = level.messages[0]
+            is_correct = msg.poll.correct_option_id == answer_option_ids[0]
+            level_answer = LevelAnswerOrm(account_id=token_data.account.id, level_id=level_id, is_correct=is_correct,
+                                          answer_option_ids=answer_option_ids)
+        elif level.type == LevelType.INFO:
+            level_answer = LevelAnswerOrm(account_id=token_data.account.id, level_id=level_id)
+        else:
+            raise ValueError()
+
+        s.add(level_answer)
+        await s.flush()
+        level_data = level_orm_to_level_data(level, None, None, None)
+        student = account_orm_to_student_data(token_data.account, None, None)
+        res = level_answer_orm_to_level_answer_data(level_answer, level_data, student)
+        await s.commit()
+        return res

@@ -10,8 +10,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service.models import AccountType
 from handlers import admin_roles_handlers, last_handlers, admin_employees_handlers, trainings_handlers, \
-    my_account_handlers
-from handlers.handlers_utils import reset_state
+    my_account_handlers, student_handlers
+from handlers.handlers_utils import reset_state, delete_msg
 from handlers.last_handlers import help_handler
 from src import strings, commands
 from custom_storage import TOKEN
@@ -23,11 +23,6 @@ from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates,
 from src.utils import get_access_key_link, START_SESSION_MSG_ID
 
 router = Router()
-router.include_routers(trainings_handlers.router)
-router.include_routers(admin_roles_handlers.router)
-router.include_routers(my_account_handlers.router)
-router.include_routers(admin_employees_handlers.router)
-router.include_routers(last_handlers.router)
 
 
 class LogInDataCD(CallbackData, prefix='log_in_data'):
@@ -63,19 +58,12 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
         state_data = await state.get_data()
         start_session_msg_id = state_data.get(START_SESSION_MSG_ID, None)
         await state.set_data({TOKEN: log_in_data.token, START_SESSION_MSG_ID: msg.message_id})
-
-        async def delete_msg(chat_id: int, msg_id: int):
-            try:
-                await msg.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except TelegramBadRequest as _:
-                pass
-
         if start_session_msg_id:
-            wait_msg = await msg.answer(strings.CLEAR_PREVIOUS_SESSION)
+            wait_msg = await msg.answer(strings.WAIT_CLEAR_PREVIOUS_SESSION)
             await state.set_state(MainStates.CLEAR_PREVIOUS_SESSION)
             all_msg_ids = list(range(start_session_msg_id, msg.message_id))[::-1]
             for i in range(0, len(all_msg_ids), 5):
-                tasks = [delete_msg(msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
+                tasks = [delete_msg(msg.bot, msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
                 await asyncio.gather(*tasks)
             await wait_msg.delete()
         await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
@@ -84,6 +72,8 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
             text = strings.LOG_IN__SUCCESS__FIRST
             keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)
             await msg.answer(text, reply_markup=keyboard)
+        elif account.type == AccountType.STUDENT:
+            await student_handlers.show_start(log_in_data.token, msg, state)
         else:
             await help_handler(msg, state)
     except KeyNotFoundError:

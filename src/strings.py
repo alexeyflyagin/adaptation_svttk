@@ -51,6 +51,11 @@ BTN_STUDENTS = "Ученики"
 BTN_ROLES = "Роли"
 BTN_TRAINING_START = "▶️  Запустить"
 BTN_TRAINING_STOP = "⏹  Остановить"
+BTN_BEGIN = "Начать!"
+BTN_CONTINUE = "Продолжить"
+BTN_ALREADY_READ = "Прочитано"
+BTN_NEXT = "Далее"
+BTN_SHOW_RESULTS = "Показать результаты"
 
 # DateFormats
 DATE_FORMAT_FULL = "%d.%m.%Y"
@@ -72,9 +77,13 @@ CONTENT_TYPE__POLL__QUIZ = "Опрос-викторина"
 # General
 SESSION_ERROR = f"""Ошибка! Истек срок сессии."""
 
+TELEGRAM_IS_NOT_STABLE = f"""Сервера телеграма нестабильны. Попробуйте позже."""
+
 ACTION_CANCELED = f"""Действие отменено."""
 
-CLEAR_PREVIOUS_SESSION = f"""🔴 Дождитесь завершение предыдущей сессии."""
+WAIT_CLEAR_PREVIOUS_SESSION = f"""🔴 Дождитесь завершение предыдущей сессии."""
+
+WAIT = f"""🔴 Подождите..."""
 
 # LogIn
 LOG_IN__SUCCESS = f"""👋  Добрый день, <code>{{first_name}}</code>."""
@@ -497,6 +506,18 @@ MY_ACCOUNT__EMPLOYEE = f"""<b>Мой аккаунт</b>
 —
 Роли:  {{roles}}
 Курсы:  {{trainings}}"""
+
+
+# TrainingProgress
+TRAINING_PROGRESS__BEGIN = f"""Нажмите '<code>{BTN_BEGIN}</code>', чтобы приступить к прохождению курса."""
+TRAINING_PROGRESS__COMPLETED = f"""<b>Поздравлем вас!</b> Вы успешно завершили курс '<code>{{training_name}}</code>'. 
+<i>Все результаты сохранены.</i>"""
+
+TRAINING_PROGRESS__QUIZ_ANSWER__TRUE = "верно"
+TRAINING_PROGRESS__QUIZ_ANSWER__FALSE = "неверно"
+
+TRAINING_PROGRESS__NEXT__INFO = f"""Ознакомьтесь с информацией."""
+TRAINING_PROGRESS__NEXT__QUIZ = f"""ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ"""
 
 
 def field(it: Optional[str]):

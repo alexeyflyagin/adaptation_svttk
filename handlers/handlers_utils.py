@@ -1,4 +1,6 @@
+from aiogram import Bot
 from aiogram.enums import ContentType, PollType
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
@@ -36,68 +38,80 @@ async def token_not_valid_error(msg: Message, state: FSMContext):
     await msg.answer(text=strings.SESSION_ERROR)
 
 
+async def delete_msg(bot: Bot, chat_id: int, msg_id: int):
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+    except TelegramBadRequest as _:
+        pass
+
+
 async def token_not_valid_error_for_callback(callback: CallbackQuery):
     await callback.answer(strings.SESSION_ERROR)
     await callback.message.edit_reply_markup(inline_message_id=None)
 
 
-async def send_msg(c_msg: Message, msgs: list[Message]) -> Message:
+async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bool = False) -> Message:
     if len(msgs) == 0:
         raise ValueError()
     if len(msgs) == 1:
         msg = msgs[0]
         if msg.content_type == ContentType.TEXT:
-            res = await c_msg.answer(text=msg.html_text, message_effect_id=msg.effect_id)
+            res = await c_msg.answer(text=msg.html_text, message_effect_id=msg.effect_id,
+                                     disable_notification=disable_notification)
         elif msg.content_type == ContentType.PHOTO:
             res = await c_msg.answer_photo(photo=msg.photo[-1].file_id, caption=msg.html_text,
                                            caption_entities=msg.caption_entities, message_effect_id=msg.effect_id,
                                            show_caption_above_media=msg.show_caption_above_media,
-                                           has_spoiler=msg.has_media_spoiler)
+                                           has_spoiler=msg.has_media_spoiler, disable_notification=disable_notification)
         elif msg.content_type == ContentType.VIDEO:
             res = await c_msg.answer_video(video=msg.video.file_id, caption=msg.html_text, duration=msg.video.duration,
                                            width=msg.video.width, height=msg.video.height,
                                            caption_entities=msg.caption_entities, has_spoiler=msg.has_media_spoiler,
                                            show_caption_above_media=msg.show_caption_above_media,
-                                           message_effect_id=msg.effect_id)
+                                           message_effect_id=msg.effect_id, disable_notification=disable_notification)
         elif msg.content_type == ContentType.DOCUMENT:
             res = await c_msg.answer_document(document=msg.document.file_id, caption_entities=msg.caption_entities,
-                                              caption=msg.caption,
-                                              message_effect_id=msg.effect_id)
+                                              caption=msg.html_text,
+                                              message_effect_id=msg.effect_id, disable_notification=disable_notification)
         elif msg.content_type == ContentType.POLL:
             res = await c_msg.answer_poll(question=msg.poll.question, options=[i.text for i in msg.poll.options],
                                           explanation_entities=msg.poll.explanation_entities, is_anonymous=False,
                                           allows_multiple_answers=msg.poll.allows_multiple_answers, type=msg.poll.type,
                                           correct_option_id=msg.poll.correct_option_id, message_effect_id=msg.effect_id,
-                                          explanation=msg.poll.explanation,
+                                          explanation=msg.poll.explanation, disable_notification=disable_notification,
                                           question_entities=msg.poll.question_entities)
         elif msg.content_type == ContentType.AUDIO:
-            res = await c_msg.answer_audio(audio=msg.audio.file_id, caption=msg.caption, performer=msg.audio.performer,
+            res = await c_msg.answer_audio(audio=msg.audio.file_id, caption=msg.html_text, performer=msg.audio.performer,
                                            caption_entities=msg.caption_entities, message_effect_id=msg.effect_id,
-                                           duration=msg.audio.duration, title=msg.audio.title)
+                                           duration=msg.audio.duration, title=msg.audio.title,
+                                           disable_notification=disable_notification)
         elif msg.content_type == ContentType.STICKER:
             res = await c_msg.answer_sticker(sticker=msg.sticker.file_id, emoji=msg.sticker.emoji,
-                                             message_effect_id=msg.effect_id)
+                                             message_effect_id=msg.effect_id, disable_notification=disable_notification)
         elif msg.content_type == ContentType.ANIMATION:
             res = await c_msg.answer_animation(animation=msg.animation.file_id, duration=msg.animation.duration,
                                                width=msg.animation.width, height=msg.animation.height,
-                                               caption=msg.caption, caption_entities=msg.caption_entities,
+                                               caption=msg.html_text, caption_entities=msg.caption_entities,
                                                message_effect_id=msg.effect_id, has_spoiler=msg.has_media_spoiler,
-                                               show_caption_above_media=msg.show_caption_above_media)
+                                               show_caption_above_media=msg.show_caption_above_media,
+                                               disable_notification=disable_notification)
         elif msg.content_type == ContentType.CONTACT:
             res = await c_msg.answer_contact(phone_number=msg.contact.phone_number, first_name=msg.contact.first_name,
                                              last_name=msg.contact.last_name, vcard=msg.contact.vcard,
-                                             message_effect_id=msg.effect_id)
+                                             message_effect_id=msg.effect_id, disable_notification=disable_notification)
         elif msg.content_type == ContentType.LOCATION:
             res = await c_msg.answer_location(latitude=msg.location.latitude, longitude=msg.location.longitude,
                                               horizontal_accuracy=msg.location.horizontal_accuracy,
                                               heading=msg.location.heading, message_effect_id=msg.effect_id,
-                                              proximity_alert_radius=msg.location.proximity_alert_radius)
+                                              proximity_alert_radius=msg.location.proximity_alert_radius,
+                                              disable_notification=disable_notification)
         else:
             raise ValueError()
     else:
         msg = msgs[-1]
         media = [get_input_media_by_level_type(i, msgs[0].show_caption_above_media) for i in msgs]
-        res = await c_msg.answer_media_group(media=media, message_effect_id=msg.effect_id)
+        res = await c_msg.answer_media_group(media=media, message_effect_id=msg.effect_id,
+                                             disable_notification=disable_notification)
     return res
 
 

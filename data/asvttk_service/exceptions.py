@@ -60,5 +60,9 @@ class NotFoundError(Exception):
     pass
 
 
+class LevelAnswerAlreadyExistsError(Exception):
+    pass
+
+
 class NoArgsError(Exception):
     pass

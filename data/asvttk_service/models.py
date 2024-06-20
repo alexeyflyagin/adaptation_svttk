@@ -88,6 +88,7 @@ class AccountOrm(Base):
 
     roles = relationship("RoleOrm", secondary="role_and_accounts", back_populates="accounts")
     training = relationship("TrainingOrm", back_populates="students")
+    answers = relationship("LevelAnswerOrm", back_populates="student", cascade="all, delete")
 
 
 class RoleAndAccountOrm(Base):
@@ -130,6 +131,7 @@ class LevelOrm(Base):
     messages: Mapped[list[Message]] = mapped_column(MSGS)
 
     training = relationship("TrainingOrm", back_populates="levels")
+    answers = relationship("LevelAnswerOrm", back_populates="level", cascade="all, delete")
 
 
 class LevelAnswerOrm(Base):
@@ -140,6 +142,9 @@ class LevelAnswerOrm(Base):
     level_id: Mapped[int] = mapped_column(ForeignKey("levels.id", ondelete="CASCADE"))
     answer_option_ids: Mapped[Optional[list[int]]] = mapped_column(JSON, nullable=True)
     is_correct: Mapped[Optional[bool]] = mapped_column(nullable=True)
+
+    level = relationship("LevelOrm", back_populates="answers")
+    student = relationship("AccountOrm", back_populates="answers", cascade="all, delete")
 
 
 class TrainingOrm(Base):
