@@ -12,7 +12,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_album import AlbumMessage
 
 from data.asvttk_service.exceptions import TokenNotValidError, AccessError, EmptyFieldError, NotFoundError, \
-    TrainingStateError, TrainingIsActiveError, TrainingIsNotActiveError, InitialsValueError, TrainingHasStudentsError
+    TrainingStateError, TrainingIsActiveError, TrainingIsNotActiveError, InitialsValueError, TrainingHasStudentsError, \
+    TrainingIsEmptyError
 from data.asvttk_service.models import LevelType, AccountType
 from data.asvttk_service.types import TrainingData, StudentData
 from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
@@ -312,6 +313,8 @@ async def start_training_callback(callback: CallbackQuery, state: FSMContext):
         else:
             await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
             await callback.answer()
+    except TrainingIsEmptyError:
+        await callback.answer(strings.TRAINING__STARTED__ERROR__TRAINING_IS_EMPTY)
     except NotFoundError:
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TrainingStateError:

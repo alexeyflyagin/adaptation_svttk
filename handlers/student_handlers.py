@@ -134,6 +134,7 @@ async def restart_handler(msg: Message, state: FSMContext):
             progress = await service.get_student_progress(token)
             level_answered_ids = [i.level_id for i in progress.answers]
             levels = [i for i in progress.training.levels if i.id in level_answered_ids and i.type == LevelType.INFO]
+            await send_msg(msg, progress.training.message)
             try:
                 for level in levels:
                     await send_msg(msg, level.messages, disable_notification=True)
@@ -151,7 +152,7 @@ async def restart_handler(msg: Message, state: FSMContext):
 async def show_start(token: str, msg: Message, state: FSMContext):
     progress = await service.get_student_progress(token)
     bot_msg = await send_msg(msg, progress.training.message)
-    await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id})
+    await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
     if progress.progress_state != StudentProgressState.START:
         await restart_handler(msg, state)
         return

@@ -15,6 +15,9 @@ from data.asvttk_service import asvttk_service as service
 from src.utils import get_input_media_by_level_type, START_SESSION_MSG_ID
 
 
+ADDITIONAL_SESSION_MSG_IDS = "additional_session_msgs"
+
+
 async def reset_state(state: FSMContext):
     token = await get_token(state)
     if token:
@@ -115,6 +118,12 @@ async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bo
         res = await c_msg.answer_media_group(media=media, message_effect_id=msg.effect_id,
                                              disable_notification=disable_notification)
     return res
+
+
+async def add_additional_msg_id(state: FSMContext, it: int):
+    state_data = await state.get_data()
+    session_msgs = state_data.get(ADDITIONAL_SESSION_MSG_IDS, [])
+    await state.update_data({ADDITIONAL_SESSION_MSG_IDS: session_msgs + [it]})
 
 
 async def log_out(msg: Message, state: FSMContext, new_token: Optional[str] = None,

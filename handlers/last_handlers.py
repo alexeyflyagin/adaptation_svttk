@@ -10,6 +10,7 @@ from data.asvttk_service.models import AccountType
 from handlers.handlers_utils import get_token
 from src import strings
 from src.states import MainStates
+from src.utils import show
 
 router = Router()
 
@@ -22,15 +23,24 @@ async def help_handler(msg: Message, state: FSMContext):
     if msg.content_type in [ContentType.PINNED_MESSAGE]:
         return
     try:
-        await service.token_validate(token)
-        account = await service.get_account_by_id(token)
-        if account.type == AccountType.ADMIN:
-            text = strings.HELP__ADMIN
-        elif account.type == AccountType.EMPLOYEE:
-            text = strings.HELP__EMPLOYEE
-        else:
-            raise ValueError()
-        await msg.answer(text)
+        await show_help(token, msg)
     except TokenNotValidError:
         await msg.answer(strings.HELP__NO_AUTHORIZATION)
         return
+
+
+@router.message(MainStates.STUDENT)
+async def other_handler(msg: Message, state: FSMContext):
+    await msg.delete()
+
+
+async def show_help(token: str, msg: Message, is_answer: bool = True):
+    await service.token_validate(token)
+    account = await service.get_account_by_id(token)
+    if account.type == AccountType.ADMIN:
+        text = strings.HELP__ADMIN
+    elif account.type == AccountType.EMPLOYEE:
+        text = strings.HELP__EMPLOYEE
+    else:
+        raise ValueError()
+    await show(msg, text, is_answer)

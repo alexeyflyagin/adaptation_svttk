@@ -12,14 +12,15 @@ from data.asvttk_service import types
 from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
     KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, TrainingStateError, \
-    TrainingIsActiveError, TrainingIsNotActiveError, LevelAnswerAlreadyExistsError, TrainingHasStudentsError
+    TrainingIsActiveError, TrainingIsNotActiveError, LevelAnswerAlreadyExistsError, TrainingHasStudentsError, \
+    TrainingIsEmptyError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data, \
     level_answer_orm_to_level_answer_data
 from data.asvttk_service.models import KeyOrm, SessionOrm, AccountOrm, AccountType, RoleOrm, TrainingOrm, \
     TrainingAndRoleOrm, RoleAndAccountOrm, LevelOrm, LevelAnswerOrm, LevelType
-from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, LevelData, \
-    StudentData, LevelAnswerData, StudentProgressData, StudentProgressState
+from data.asvttk_service.types import AccountData, RoleData, EmployeeData, CreatedAccountData, TrainingData, \
+    LevelData, StudentData, LevelAnswerData, StudentProgressData, StudentProgressState, LogInData
 from data.asvttk_service.utils import generate_session_token, generate_access_key, email_check, initials_check, \
     empty_check, get_current_time
 from src import strings
@@ -106,6 +107,15 @@ async def log_out(token: str):
         token_session_orm = await __validate_by_token(s, token)
         await s.delete(token_session_orm.session)
         await s.commit()
+
+
+@typechecked
+async def get_log_in_data_token(token: str) -> LogInData:
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        res = LogInData(token, token_data.key.is_first_log_in, token_data.key.access_key, token_data.account.type,
+                        token_data.account.id)
+        return res
 
 
 @typechecked
@@ -641,10 +651,13 @@ async def start_training(token: str, training_id: int):
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
         query = await s.execute(select(TrainingOrm).options(joinedload(TrainingOrm.students))
+                                .options(joinedload(TrainingOrm.levels))
                                 .filter(TrainingOrm.id == training_id))
         training = query.scalars().unique().first()
         if not training:
             raise NotFoundError
+        if len(training.levels) == 0:
+            raise TrainingIsEmptyError()
         if training.date_start and not training.date_end:
             raise TrainingStateError()
         training.date_start = get_current_time()

@@ -6,12 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from data.asvttk_service.exceptions import KeyNotFoundError
+from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
 from data.asvttk_service.models import AccountType
 from handlers import student_handlers
 from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
-from handlers.handlers_utils import delete_msg, log_out
-from handlers.last_handlers import help_handler
+from handlers.handlers_utils import delete_msg, log_out, get_token, ADDITIONAL_SESSION_MSG_IDS, \
+    token_not_valid_error_for_callback
+from handlers.last_handlers import help_handler, show_help
 from src import strings
 from src.utils import get_access_key_link
 from data.asvttk_service import asvttk_service as service
@@ -43,11 +44,15 @@ def get_log_in_data_keyboard(first_name: str, access_key: str, has_read_it: bool
 
 
 @router.callback_query(LogInDataCD.filter())
-async def log_in_data_callback(callback: CallbackQuery):
+async def log_in_data_callback(callback: CallbackQuery, state: FSMContext):
     data = LogInDataCD.unpack(callback.data)
-    if data.action == data.Action.READ_IT:
-        await callback.message.delete()
-    await callback.answer()
+    token = await get_token(state)
+    try:
+        if data.action == data.Action.READ_IT:
+            await show_help(token, callback.message, is_answer=False)
+        await callback.answer()
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_LOG_IN_WARNING))
@@ -73,8 +78,13 @@ async def show_warning(msg: Message, access_key: str, warning_text: str):
 async def log_in(msg: Message, user_id: int, state: FSMContext, access_key: str):
     log_in_data = await service.log_in(user_id, key=access_key)
     account = await service.get_account_by_id(log_in_data.token)
+    state_data = await state.get_data()
+    asmsgs = state_data.get(ADDITIONAL_SESSION_MSG_IDS, [])
+    for i in asmsgs:
+        await delete_msg(msg.bot, msg.chat.id, i)
     await log_out(msg, state, new_token=log_in_data.token)
-    await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
+    if log_in_data.account_type != AccountType.STUDENT:
+        await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
     if log_in_data.is_first and account.type != AccountType.STUDENT:
         text = strings.LOG_IN__SUCCESS__FIRST
         keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)

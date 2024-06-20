@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import Optional, Any
+from typing import Optional
 
 import sqlalchemy
 from aiogram.types import Message

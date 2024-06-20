@@ -26,7 +26,7 @@ async def main():
     student_handlers.bot = bot
     try:
         await bot.set_my_commands(config.BOT_COMMANDS)
-        await database.connect(drop_all="ye")
+        await database.connect(drop_all="yes")
         await bot.delete_webhook(drop_pending_updates=True)
         print("bot started")
         await dispatcher.start_polling(bot)

@@ -51,8 +51,8 @@ def get_files_from_msg(msg: AlbumMessage | Message) -> dict[str, str]:
 def get_input_media_by_level_type(msg: Message, show_caption_above_media: bool | None = None) -> \
         (InputMediaPhoto | InputMediaVideo | InputMediaDocument | InputMediaAnimation | InputMediaAudio):
     if msg.content_type == ContentType.PHOTO:
-        return InputMediaPhoto(media=msg.photo[-1].file_id, caption=msg.html_text, caption_entities=msg.caption_entities,
-                               show_caption_above_media=show_caption_above_media, has_spoiler=msg.has_media_spoiler)
+        return InputMediaPhoto(media=msg.photo[-1].file_id, caption=msg.html_text, has_spoiler=msg.has_media_spoiler,
+                               caption_entities=msg.caption_entities, show_caption_above_media=show_caption_above_media)
     elif msg.content_type == ContentType.VIDEO:
         return InputMediaVideo(media=msg.video.file_id, caption=msg.html_text,
                                caption_entities=msg.caption_entities, width=msg.video.width,

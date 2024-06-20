@@ -8,7 +8,7 @@ from aiogram.types import Message
 from custom_storage import TOKEN
 from data.asvttk_service.models import AccountType
 from handlers.authorization_handlers import show_warning, log_in
-from handlers.handlers_utils import reset_state, delete_msg
+from handlers.handlers_utils import reset_state, delete_msg, ADDITIONAL_SESSION_MSG_IDS, add_additional_msg_id
 from src import strings, commands
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
@@ -22,21 +22,26 @@ router = Router()
 
 @router.message(Command(commands.START))
 async def start_handler(msg: Message, state: FSMContext, command: CommandObject):
-    await msg.delete()
-    if not command.args:
-        bot_text = await msg.answer(strings.LOG_IN__NO_ACCESS_KEY)
-        await asyncio.sleep(3)
-        await delete_msg(bot_text.bot, bot_text.chat.id, bot_text.message_id)
-        return
     access_key = command.args
+    state_data = await state.get_data()
+    token = state_data.get(TOKEN, None)
+    if not access_key:
+        bot_msg = await msg.answer(strings.LOG_IN__NO_ACCESS_KEY)
+        if token:
+            await asyncio.sleep(3)
+            await delete_msg(msg.bot, msg.chat.id, msg.message_id)
+            await delete_msg(bot_msg.bot, bot_msg.chat.id, bot_msg.message_id)
+        else:
+            await delete_msg(msg.bot, msg.chat.id, msg.message_id)
+            await add_additional_msg_id(state, bot_msg.message_id)
+        return
     try:
         await service.check_access_key(access_key)
-        state_data = await state.get_data()
-        token = state_data.get(TOKEN, None)
         try:
             if token is None:
                 raise TokenNotValidError()
             account = await service.get_account_by_token(token)
+            await delete_msg(msg.bot, msg.chat.id, msg.message_id)
             if account.type == AccountType.STUDENT:
                 await show_warning(msg, access_key, strings.LOG_IN__WARNING__STUDENT)
                 return
@@ -47,9 +52,15 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
             pass
         await log_in(msg, msg.from_user.id, state, access_key)
     except KeyNotFoundError:
-        bot_text = await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
-        await asyncio.sleep(3)
-        await delete_msg(bot_text.bot, bot_text.chat.id, bot_text.message_id)
+        bot_msg = await msg.answer(strings.LOG_IN__ACCOUNT_NOT_FOUND)
+        if token:
+            await asyncio.sleep(3)
+            await delete_msg(msg.bot, msg.chat.id, msg.message_id)
+            await delete_msg(bot_msg.bot, bot_msg.chat.id, bot_msg.message_id)
+        else:
+            await delete_msg(msg.bot, msg.chat.id, msg.message_id)
+            await add_additional_msg_id(state, bot_msg.message_id)
+    await delete_msg(msg.bot, msg.chat.id, msg.message_id)
 
 
 @router.message(RoleCreateStates(), Command(commands.CANCEL))

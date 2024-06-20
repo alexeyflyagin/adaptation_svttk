@@ -23,6 +23,10 @@ class TrainingStateError(Exception):
     pass
 
 
+class TrainingIsEmptyError(Exception):
+    pass
+
+
 class InitialsValueError(Exception):
     pass
 

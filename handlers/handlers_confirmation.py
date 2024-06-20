@@ -12,12 +12,12 @@ class ConfirmationCD(CallbackData, prefix="confirmation"):
     token: str
     tag: str
     is_agree: bool
-    item_id: int
+    item_id: Optional[int]
     args: Optional[Any] = None
     arg1: Optional[Any] = None
 
 
-def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None,
+def confirmation_keyboard(token: str, tag: str, item_id: Optional[int], args: Optional[Any] = None,
                           arg1: Optional[Any] = None):
     kbb = InlineKeyboardBuilder()
     kbb.adjust(1)
@@ -34,7 +34,7 @@ def confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any
     return kbb.as_markup()
 
 
-def simple_confirmation_keyboard(token: str, tag: str, item_id: int, args: Optional[Any] = None,
+def simple_confirmation_keyboard(token: str, tag: str, item_id: Optional[int] = None, args: Optional[Any] = None,
                                  arg1: Optional[Any] = None):
     kbb = InlineKeyboardBuilder()
     btn_yes_data = ConfirmationCD(token=token, tag=tag, is_agree=True, args=args, arg1=arg1, item_id=item_id).pack()
@@ -47,7 +47,7 @@ def simple_confirmation_keyboard(token: str, tag: str, item_id: int, args: Optio
     return kbb.as_markup()
 
 
-async def show_confirmation(token: str, msg: Message, item_id: int, text: str, tag: str,
+async def show_confirmation(token: str, msg: Message, item_id: Optional[int], text: str, tag: str,
                             is_answer: bool = True, args: Optional[Any] = None, arg1: Optional[Any] = None,
                             simple: bool = False):
     keyboard = confirmation_keyboard(token, tag, item_id=item_id, args=args, arg1=arg1)
