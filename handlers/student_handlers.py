@@ -106,7 +106,7 @@ async def poll_answer_handler(answer: PollAnswer, state: FSMContext):
     try:
         await service.token_validate(token)
         await service.create_level_answer(token, level_id, answer.option_ids)
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         await show_current_level(token, msg, state)
     except LevelAnswerAlreadyExistsError:
         await restart_handler(msg, state)
@@ -185,4 +185,4 @@ async def show_next_keyboard(token: str, msg: Message, progress: Optional[Studen
     text = strings.TRAINING_PROGRESS__NEXT__INFO
     if progress.current_level.type == LevelType.QUIZ:
         text = strings.TRAINING_PROGRESS__NEXT__QUIZ
-    await msg.answer(text=text, reply_markup=keyboard)
+    await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)

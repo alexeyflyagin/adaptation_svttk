@@ -282,7 +282,7 @@ async def create_student_handler(msg: Message, state: FSMContext):
         text = strings.CREATE_STUDENT__SUCCESS.format(access_key=acc_data.access_key,
                                                       access_link=get_access_key_link(acc_data.access_key))
         await msg.answer(text, reply_markup=keyboard)
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
         updated_msg = state_date.get(UPDATED_MSG, None)
         if updated_msg:
             await show_students(token, msg, updated_item_id, edited_msg_id=updated_msg[0], page_index=updated_msg[1],

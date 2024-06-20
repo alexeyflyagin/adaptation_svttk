@@ -146,8 +146,8 @@ async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, key
         elif not is_answer and not edited_msg_id:
             await msg.edit_text(text=text, reply_markup=keyboard)
         else:
-            await msg.answer(text=text, reply_markup=keyboard)
+            await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
             if is_delete and edited_msg_id:
-                await msg.bot.edit_message_reply_markup(msg.chat.id, edited_msg_id, reply_markup=None)
+                await msg.bot.edit_message_reply_markup(msg.chat.id, edited_msg_id, reply_markup=None,)
     except TelegramBadRequest as _:
         pass
