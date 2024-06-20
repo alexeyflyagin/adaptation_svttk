@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, SwitchInlineQueryChosenChat
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service.exceptions import TokenNotValidError, InitialsValueError, NotFoundError, EmailValueError
@@ -99,7 +99,7 @@ async def list_callback(callback: CallbackQuery, state: FSMContext):
             await show_employees(data.token, callback.message, page_index=data.page_index - 1, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(EmployeeCreateStates.FULL_NAME)
@@ -156,11 +156,11 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
         await show_employee(data.token, data.employee_id, callback.message, page_index=data.page_index, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == "employee"))
-async def delete_employee_callback(callback: CallbackQuery):
+async def delete_employee_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     page_index = int(data.args)
     try:
@@ -177,11 +177,11 @@ async def delete_employee_callback(callback: CallbackQuery):
         await callback.answer(text=strings.EMPLOYEE__NOT_FOUND)
         await show_employees(data.token, data.callback.message, page_index=page_index, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_EMPLOYEE_ROLES))
-async def roles_employee_callback(callback: CallbackQuery):
+async def roles_employee_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     employee_id = int(data.arg)
     page_index = int(data.arg1)
@@ -201,7 +201,7 @@ async def roles_employee_callback(callback: CallbackQuery):
         await callback.answer(text=strings.ROLE__NOT_FOUND)
         await show(callback.message, strings.ROLE__NOT_FOUND, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_EMPLOYEE_ADD_ROLES))
@@ -228,7 +228,7 @@ async def add_roles_employee_callback(callback: CallbackQuery, state: FSMContext
         await callback.answer(text=strings.ROLE__NOT_FOUND)
         await show(callback.message, strings.ROLE__NOT_FOUND, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(EmployeeEditEmailStates.EDIT_EMAIL)

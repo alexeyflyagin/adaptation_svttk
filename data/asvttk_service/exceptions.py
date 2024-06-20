@@ -7,6 +7,10 @@ class TrainingIsActiveError(Exception):
     pass
 
 
+class TrainingHasStudentsError(Exception):
+    pass
+
+
 class TrainingIsNotActiveError(Exception):
     pass
 

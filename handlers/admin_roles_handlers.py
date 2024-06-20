@@ -88,7 +88,7 @@ async def roles_callback(callback: CallbackQuery, state: FSMContext):
         await show_role(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(RoleCD.filter())
@@ -117,11 +117,11 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
         await show_role(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_ROLE_TRAININGS))
-async def edit_trainings_callback(callback: CallbackQuery):
+async def edit_trainings_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     role_id = int(data.arg)
     try:
@@ -140,11 +140,11 @@ async def edit_trainings_callback(callback: CallbackQuery):
         await callback.answer(text=strings.ROLE__NOT_FOUND)
         await show_role(data.token, role_id, callback.message, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_ROLE_ADD_TRAININGS))
-async def add_trainings_employee_callback(callback: CallbackQuery):
+async def add_trainings_employee_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     role_id = int(data.arg)
     try:
@@ -161,11 +161,11 @@ async def add_trainings_employee_callback(callback: CallbackQuery):
         await callback.answer(text=strings.ROLE__NOT_FOUND)
         await show(callback.message, strings.ROLE__NOT_FOUND, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_DELETE_ROLE))
-async def delete_role_callback(callback: CallbackQuery):
+async def delete_role_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     try:
         if data.is_agree:
@@ -180,7 +180,7 @@ async def delete_role_callback(callback: CallbackQuery):
         await callback.answer(text=strings.ROLE__NOT_FOUND)
         await show_roles(data.token, callback.message, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(RoleCreateStates.NAME)

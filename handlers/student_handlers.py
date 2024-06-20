@@ -7,10 +7,11 @@ from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, PollAnswer
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service import asvttk_service as service
-from data.asvttk_service.exceptions import TokenNotValidError, LevelAnswerAlreadyExistsError
+from data.asvttk_service.exceptions import TokenNotValidError, LevelAnswerAlreadyExistsError, \
+    TrainingIsNotActiveError
 from data.asvttk_service.models import LevelType
 from data.asvttk_service.types import StudentProgressState, StudentProgressData
 from handlers.handlers_utils import send_msg, token_not_valid_error_for_callback, get_token, delete_msg, \
@@ -77,19 +78,21 @@ async def learning_callback(callback: CallbackQuery, state: FSMContext):
         await service.token_validate(data.token)
         if data.action == data.Action.ANSWER:
             await callback.message.edit_reply_markup(reply_markup=None)
-            await callback.message.delete()
             if data.level_type == LevelType.INFO:
                 await service.create_level_answer(data.token, data.level_id)
             await show_current_level(data.token, callback.message, state)
+            await callback.message.delete()
         if data.action == data.Action.SHOW:
             await restart_handler(callback.message, state)
             await callback.answer()
     except TelegramBadRequest:
         pass
+    except TrainingIsNotActiveError:
+        await callback.message.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
     except LevelAnswerAlreadyExistsError:
         await restart_handler(callback.message, state)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.poll_answer(MainStates.STUDENT)
@@ -103,13 +106,14 @@ async def poll_answer_handler(answer: PollAnswer, state: FSMContext):
     try:
         await service.token_validate(token)
         await service.create_level_answer(token, level_id, answer.option_ids)
+        await asyncio.sleep(1)
+        await show_current_level(token, msg, state)
     except LevelAnswerAlreadyExistsError:
         await restart_handler(msg, state)
-        return
+    except TrainingIsNotActiveError:
+        await msg.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
     except TokenNotValidError:
-        await msg.answer(text=strings.SESSION_ERROR)
-    await asyncio.sleep(1)
-    await show_current_level(token, msg, state)
+        await token_not_valid_error(msg, state)
 
 
 @router.message(MainStates.STUDENT, Command(commands.HELP))
@@ -121,13 +125,12 @@ async def restart_handler(msg: Message, state: FSMContext):
     try:
         await service.token_validate(token)
         if start_learn_msg_id:
-            wait_msg = await msg.answer(strings.WAIT)
+            wait_msg = await msg.answer(strings.WAIT_UPDATING)
             await state.set_state(MainStates.WAIT)
             all_msg_ids = list(range(start_learn_msg_id + 1, msg.message_id))[::-1]
             for i in range(0, len(all_msg_ids), 5):
                 tasks = [delete_msg(msg.bot, msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
                 await asyncio.gather(*tasks)
-            await wait_msg.delete()
             progress = await service.get_student_progress(token)
             level_answered_ids = [i.level_id for i in progress.answers]
             levels = [i for i in progress.training.levels if i.id in level_answered_ids and i.type == LevelType.INFO]
@@ -136,8 +139,11 @@ async def restart_handler(msg: Message, state: FSMContext):
                     await send_msg(msg, level.messages, disable_notification=True)
                 await reset_state(state)
                 await show_current_level(token, msg, state)
+                await wait_msg.delete()
             except TelegramBadRequest:
+                await reset_state(state)
                 await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
+                await wait_msg.delete()
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
 
@@ -161,10 +167,13 @@ async def show_current_level(token: str, msg: Message, state: FSMContext):
             await msg.answer(text, message_effect_id=CONFETTI_MSG_EFFECT_ID)
             return
         level_msg = await send_msg(msg, progress.current_level.messages)
+        await service.training_is_not_started_check(token, progress.training.id)
         if progress.current_level.type == LevelType.QUIZ:
             await state.update_data({CLD: [level_msg.model_dump_json(), progress.current_level.id]})
         if progress.current_level.type == LevelType.INFO:
             await show_next_keyboard(token, msg, progress)
+    except TrainingIsNotActiveError:
+        await msg.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
     except TelegramBadRequest:
         await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
 
@@ -177,6 +186,3 @@ async def show_next_keyboard(token: str, msg: Message, progress: Optional[Studen
     if progress.current_level.type == LevelType.QUIZ:
         text = strings.TRAINING_PROGRESS__NEXT__QUIZ
     await msg.answer(text=text, reply_markup=keyboard)
-
-
-

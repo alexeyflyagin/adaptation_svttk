@@ -1,3 +1,6 @@
+import asyncio
+from typing import Optional
+
 from aiogram import Bot
 from aiogram.enums import ContentType, PollType
 from aiogram.exceptions import TelegramBadRequest
@@ -9,7 +12,7 @@ from data.asvttk_service.models import AccountType
 from src import strings
 from src.states import MainStates
 from data.asvttk_service import asvttk_service as service
-from src.utils import get_input_media_by_level_type
+from src.utils import get_input_media_by_level_type, START_SESSION_MSG_ID
 
 
 async def reset_state(state: FSMContext):
@@ -33,9 +36,12 @@ async def get_token(state: FSMContext):
 
 
 async def token_not_valid_error(msg: Message, state: FSMContext):
-    await state.update_data({TOKEN: None})
-    await reset_state(state)
-    await msg.answer(text=strings.SESSION_ERROR)
+    await log_out(msg, state, log_out_text=strings.SESSION_ERROR, delete_current_msg=True)
+
+
+async def token_not_valid_error_for_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_reply_markup(inline_message_id=None)
+    await log_out(callback.message, state, log_out_text=strings.SESSION_ERROR)
 
 
 async def delete_msg(bot: Bot, chat_id: int, msg_id: int):
@@ -43,11 +49,6 @@ async def delete_msg(bot: Bot, chat_id: int, msg_id: int):
         await bot.delete_message(chat_id=chat_id, message_id=msg_id)
     except TelegramBadRequest as _:
         pass
-
-
-async def token_not_valid_error_for_callback(callback: CallbackQuery):
-    await callback.answer(strings.SESSION_ERROR)
-    await callback.message.edit_reply_markup(inline_message_id=None)
 
 
 async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bool = False) -> Message:
@@ -72,7 +73,8 @@ async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bo
         elif msg.content_type == ContentType.DOCUMENT:
             res = await c_msg.answer_document(document=msg.document.file_id, caption_entities=msg.caption_entities,
                                               caption=msg.html_text,
-                                              message_effect_id=msg.effect_id, disable_notification=disable_notification)
+                                              message_effect_id=msg.effect_id,
+                                              disable_notification=disable_notification)
         elif msg.content_type == ContentType.POLL:
             res = await c_msg.answer_poll(question=msg.poll.question, options=[i.text for i in msg.poll.options],
                                           explanation_entities=msg.poll.explanation_entities, is_anonymous=False,
@@ -81,10 +83,10 @@ async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bo
                                           explanation=msg.poll.explanation, disable_notification=disable_notification,
                                           question_entities=msg.poll.question_entities)
         elif msg.content_type == ContentType.AUDIO:
-            res = await c_msg.answer_audio(audio=msg.audio.file_id, caption=msg.html_text, performer=msg.audio.performer,
-                                           caption_entities=msg.caption_entities, message_effect_id=msg.effect_id,
-                                           duration=msg.audio.duration, title=msg.audio.title,
-                                           disable_notification=disable_notification)
+            res = await c_msg.answer_audio(audio=msg.audio.file_id, caption=msg.html_text,
+                                           performer=msg.audio.performer, caption_entities=msg.caption_entities,
+                                           message_effect_id=msg.effect_id, duration=msg.audio.duration,
+                                           title=msg.audio.title, disable_notification=disable_notification)
         elif msg.content_type == ContentType.STICKER:
             res = await c_msg.answer_sticker(sticker=msg.sticker.file_id, emoji=msg.sticker.emoji,
                                              message_effect_id=msg.effect_id, disable_notification=disable_notification)
@@ -113,6 +115,31 @@ async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bo
         res = await c_msg.answer_media_group(media=media, message_effect_id=msg.effect_id,
                                              disable_notification=disable_notification)
     return res
+
+
+async def log_out(msg: Message, state: FSMContext, new_token: Optional[str] = None,
+                  log_out_text: Optional[str] = None):
+    if log_out_text:
+        log_out_msg = await msg.answer(log_out_text)
+        await asyncio.sleep(1)
+    else:
+        log_out_msg = await msg.answer("-")
+        await log_out_msg.delete()
+    state_data = await state.get_data()
+    start_session_msg_id = state_data.get(START_SESSION_MSG_ID, None)
+    await state.set_data({TOKEN: new_token, START_SESSION_MSG_ID: msg.message_id})
+    if start_session_msg_id:
+        wait_msg = await msg.answer(strings.WAIT_CLEAR_PREVIOUS_SESSION)
+        await state.set_state(MainStates.CLEAR_PREVIOUS_SESSION)
+        end_session_msg_id = log_out_msg.message_id
+        all_msg_ids = list(range(start_session_msg_id, end_session_msg_id))[::-1]
+        for i in range(0, len(all_msg_ids), 5):
+            tasks = [delete_msg(msg.bot, msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
+            await asyncio.gather(*tasks)
+        await wait_msg.delete()
+    await reset_state(state)
+    if log_out_msg:
+        await delete_msg(msg.bot, msg.chat.id, log_out_msg.message_id)
 
 
 def get_content_type_srt(msgs: [Message]):
@@ -167,4 +194,3 @@ def get_content_html_text(msgs: [Message]) -> str | None:
     if msg.content_type == ContentType.POLL:
         content_text = msg.poll.question
     return content_text
-

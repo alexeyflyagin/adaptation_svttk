@@ -1,7 +1,4 @@
-import asyncio
-
 from aiogram import Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandObject, Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
@@ -9,18 +6,16 @@ from aiogram.types import Message, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service.models import AccountType
-from handlers import admin_roles_handlers, last_handlers, admin_employees_handlers, trainings_handlers, \
-    my_account_handlers, student_handlers
-from handlers.handlers_utils import reset_state, delete_msg
+from handlers import student_handlers
+from handlers.handlers_utils import reset_state, log_out
 from handlers.last_handlers import help_handler
 from src import strings, commands
-from custom_storage import TOKEN
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
-    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, MainStates, \
+    TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, \
     TrainingStartEditStates, LevelEditStates, StudentCreateState
-from src.utils import get_access_key_link, START_SESSION_MSG_ID
+from src.utils import get_access_key_link
 
 router = Router()
 
@@ -55,19 +50,8 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
     try:
         log_in_data = await service.log_in(user_id, key=command.args)
         account = await service.get_account_by_id(log_in_data.token)
-        state_data = await state.get_data()
-        start_session_msg_id = state_data.get(START_SESSION_MSG_ID, None)
-        await state.set_data({TOKEN: log_in_data.token, START_SESSION_MSG_ID: msg.message_id})
-        if start_session_msg_id:
-            wait_msg = await msg.answer(strings.WAIT_CLEAR_PREVIOUS_SESSION)
-            await state.set_state(MainStates.CLEAR_PREVIOUS_SESSION)
-            all_msg_ids = list(range(start_session_msg_id, msg.message_id))[::-1]
-            for i in range(0, len(all_msg_ids), 5):
-                tasks = [delete_msg(msg.bot, msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
-                await asyncio.gather(*tasks)
-            await wait_msg.delete()
+        await log_out(msg, state, new_token=log_in_data.token)
         await msg.answer(strings.LOG_IN__SUCCESS.format(first_name=account.first_name))
-        await reset_state(state)
         if log_in_data.is_first and account.type != AccountType.STUDENT:
             text = strings.LOG_IN__SUCCESS__FIRST
             keyboard = get_log_in_data_keyboard(account.first_name, access_key=log_in_data.access_key, has_log_in=False)

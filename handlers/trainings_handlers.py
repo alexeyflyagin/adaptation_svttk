@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from typing import Optional, Any
 
@@ -11,10 +12,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_album import AlbumMessage
 
 from data.asvttk_service.exceptions import TokenNotValidError, AccessError, EmptyFieldError, NotFoundError, \
-    TrainingStateError, TrainingIsActiveError, TrainingIsNotActiveError, InitialsValueError
+    TrainingStateError, TrainingIsActiveError, TrainingIsNotActiveError, InitialsValueError, TrainingHasStudentsError
 from data.asvttk_service.models import LevelType, AccountType
 from data.asvttk_service.types import TrainingData, StudentData
-from handlers.handlers_confirmation import ConfirmationCD, show_confirmation, confirmation_keyboard
+from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
 from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, list_keyboard, get_items_by_page, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state, \
     send_msg, get_content_type_srt, get_content_text
@@ -194,7 +195,7 @@ async def trainings_callback(callback: CallbackQuery, state: FSMContext):
             await show_trainings(data.token, callback.message, page_index=data.page_index, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(TrainingCD.filter())
@@ -206,12 +207,14 @@ async def training_callback(callback: CallbackQuery, state: FSMContext):
             await show_trainings(data.token, callback.message, data.page_index, is_answer=False)
         elif data.action == data.Action.DELETE:
             await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_has_not_students(data.token, data.training_id)
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__DELETE.format(training_name=training.name)
             await show_confirmation(data.token, callback.message, tag=TAG_TRAINING_DELETE, item_id=data.training_id,
                                     args=data.page_index, is_answer=False, text=text)
         elif data.action == data.Action.EDIT_NAME:
             await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_has_not_students(data.token, data.training_id)
             await state.set_state(TrainingEditNameStates.NAME)
             await callback.message.answer(strings.TRAINING__EDIT_NAME)
             await state.update_data({UPDATED_ITEM_ID: data.training_id})
@@ -231,12 +234,14 @@ async def training_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.STUDENTS:
             await show_students(data.token, callback.message, data.training_id, is_answer=False)
         await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
         await show_training(data.token, data.training_id, callback.message, data.page_index, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_STUDENTS))
@@ -258,7 +263,7 @@ async def students_callback(callback: CallbackQuery, state: FSMContext):
     except TrainingIsNotActiveError:
         await callback.answer(strings.TRAINING_IS_NOT_STARTED_ERROR)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(StudentCreateState.FULL_NAME)
@@ -277,6 +282,7 @@ async def create_student_handler(msg: Message, state: FSMContext):
         text = strings.CREATE_STUDENT__SUCCESS.format(access_key=acc_data.access_key,
                                                       access_link=get_access_key_link(acc_data.access_key))
         await msg.answer(text, reply_markup=keyboard)
+        await asyncio.sleep(1)
         updated_msg = state_date.get(UPDATED_MSG, None)
         if updated_msg:
             await show_students(token, msg, updated_item_id, edited_msg_id=updated_msg[0], page_index=updated_msg[1],
@@ -295,7 +301,7 @@ async def create_student_handler(msg: Message, state: FSMContext):
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_START))
-async def start_training_callback(callback: CallbackQuery):
+async def start_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     page_index = int(data.args)
     try:
@@ -312,11 +318,11 @@ async def start_training_callback(callback: CallbackQuery):
         await callback.answer(strings.TRAINING__STARTED__ERROR__ALREADY_STARTED)
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_STOP))
-async def stop_training_callback(callback: CallbackQuery):
+async def stop_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     page_index = int(data.args)
     try:
@@ -333,11 +339,11 @@ async def stop_training_callback(callback: CallbackQuery):
         await callback.answer(strings.TRAINING__STARTED__ERROR__NOT_STARTED)
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_DELETE))
-async def delete_training_callback(callback: CallbackQuery):
+async def delete_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     page_index = int(data.args)
     try:
@@ -348,12 +354,14 @@ async def delete_training_callback(callback: CallbackQuery):
         else:
             await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
             await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(TrainingCreateStates.NAME)
@@ -399,11 +407,11 @@ async def create_training_role_callback(callback: CallbackQuery, state: FSMConte
             await show_trainings(data.token, callback.message, page_index=updated_msg[1], edited_msg_id=updated_msg[0])
         await callback.answer()
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(TrainingEditNameStates.NAME)
-async def edit_name_handler(msg: Message, state: FSMContext):
+async def edit_name_training_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     if msg.content_type != ContentType.TEXT:
         await msg.answer(strings.TRAINING__EDIT_NAME__ERROR__INCORRECT_FORMAT)
@@ -416,6 +424,9 @@ async def edit_name_handler(msg: Message, state: FSMContext):
         await msg.answer(strings.TRAINING__EDIT_NAME__SUCCESS)
         if update_msg:
             await show_training(token, employee_id, msg, update_msg[1], update_msg[0])
+        await reset_state(state)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
@@ -437,6 +448,7 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
             await show_training(data.token, training_id, callback.message, is_answer=False)
         elif data.action == data.Action.ADD:
             await service.training_is_started_check(data.token, training_id)
+            await service.check_training_has_not_students(data.token, training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL__TITLE)
             await state.set_state(LevelCreateStates.TITLE)
@@ -447,10 +459,12 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.SELECT and data.selected_item_id == -1:
             await show_about_start_level(data.token, callback.message, training_id, is_answer=False)
         await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(LevelCD.filter())
@@ -480,6 +494,7 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
             await show_level(data.token, callback.message, data.level_id)
         elif data.action == data.Action.EDIT:
             await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL_CONTENT)
             await state.set_state(LevelEditStates.CONTENT)
@@ -487,18 +502,21 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         elif data.action == data.Action.EDIT_TITLE:
             await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL__TITLE)
             await state.set_state(LevelEditStates.TITLE)
             await state.update_data({UPDATED_ITEM_ID: data.level_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
         await show_about_level(data.token, callback.message, data.training_id, data.level_id, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_DELETE_LEVEL))
@@ -515,12 +533,14 @@ async def delete_level_callback(callback: CallbackQuery, state: FSMContext):
         else:
             await show_about_level(data.token, callback.message, training_id, data.item_id, is_answer=False)
             await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
         await show_about_level(data.token, callback.message, training_id, data.level_id, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(LevelEditStates.TITLE)
@@ -539,6 +559,9 @@ async def edit_level_title_handler(msg: Message, state: FSMContext):
         if updated_msg:
             level = await service.get_level_by_id(token, level_id)
             await show_about_level(token, msg, level.training_id, level_id, edited_msg_id=updated_msg[0])
+        await reset_state(state)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
@@ -569,6 +592,9 @@ async def edit_level_content_handler(msg: AlbumMessage, state: FSMContext):
             level = await service.get_level_by_id(token, level_id)
             await show_about_level(token, msg, level.training_id, level_id, edited_msg_id=updated_msg[0])
         await reset_state(state)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
+        await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
@@ -592,18 +618,21 @@ async def start_level_callback(callback: CallbackQuery, state: FSMContext):
             await show_start_level(data.token, callback.message, data.training_id)
         elif data.action == data.Action.EDIT:
             await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.TRAINING__START__EDIT__CONTENT)
             await state.set_state(TrainingStartEditStates.CONTENT)
             await state.update_data({UPDATED_ITEM_ID: data.training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         await callback.answer()
+    except TrainingHasStudentsError:
+        await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
         await show_levels(data.token, data.training_id, callback.message, is_answer=False)
     except TokenNotValidError:
-        await token_not_valid_error_for_callback(callback)
+        await token_not_valid_error_for_callback(callback, state)
 
 
 @router.message(TrainingStartEditStates.CONTENT)
@@ -621,6 +650,9 @@ async def edit_start_level_handler(msg: AlbumMessage, state: FSMContext):
         updated_msg = state_data[UPDATED_MSG]
         if updated_msg:
             await show_about_start_level(token, msg, training_id, edited_msg_id=updated_msg[0])
+        await reset_state(state)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
@@ -645,6 +677,9 @@ async def create_level_title_handler(msg: Message, state: FSMContext):
         await state.update_data({CREATE_LEVEL_TITLE: msg.text})
         await state.set_state(LevelCreateStates.CONTENT)
         await msg.answer(strings.ENTER__LEVEL_CONTENT)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
+        await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
@@ -672,6 +707,9 @@ async def create_level_content_handler(msg: AlbumMessage, state: FSMContext):
         updated_msg = state_data[UPDATED_MSG]
         if updated_msg:
             await show_levels(token, training_id, msg, edited_msg_id=updated_msg[0])
+        await reset_state(state)
+    except TrainingHasStudentsError:
+        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)

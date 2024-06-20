@@ -24,11 +24,12 @@ async def help_handler(msg: Message, state: FSMContext):
     try:
         await service.token_validate(token)
         account = await service.get_account_by_id(token)
-        text = "Хз, как это показать..."
         if account.type == AccountType.ADMIN:
             text = strings.HELP__ADMIN
-        if account.type == AccountType.EMPLOYEE:
+        elif account.type == AccountType.EMPLOYEE:
             text = strings.HELP__EMPLOYEE
+        else:
+            raise ValueError()
         await msg.answer(text)
     except TokenNotValidError:
         await msg.answer(strings.HELP__NO_AUTHORIZATION)

@@ -12,7 +12,7 @@ from data.asvttk_service import types
 from data.asvttk_service.database import database
 from data.asvttk_service.exceptions import ObjectNotFoundError, TokenNotValidError, \
     KeyNotFoundError, AccountNotFoundError, AccessError, RoleNotUniqueNameError, NotFoundError, TrainingStateError, \
-    TrainingIsActiveError, TrainingIsNotActiveError, LevelAnswerAlreadyExistsError
+    TrainingIsActiveError, TrainingIsNotActiveError, LevelAnswerAlreadyExistsError, TrainingHasStudentsError
 from data.asvttk_service.mappers import account_orm_to_account_data, role_orm_to_role_data, \
     training_orm_to_training_data, account_orm_to_employee_data, account_orm_to_student_data, level_orm_to_level_data, \
     level_answer_orm_to_level_answer_data
@@ -71,6 +71,27 @@ async def __check_training(s: AsyncSession, training_id: int, student_id: int):
         raise AccessError()
 
 
+async def __check_training_has_not_students(s: AsyncSession, training_id: int):
+    query = await s.execute(select(AccountOrm).filter(AccountOrm.type == AccountType.STUDENT,
+                                                      AccountOrm.training_id == training_id))
+    students = query.scalars().all()
+    if students:
+        raise TrainingHasStudentsError()
+
+
+@typechecked()
+async def check_training_has_not_students(token: str, training_id: int):
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
+            raise AccessError()
+        if token_data.account.type == AccountType.EMPLOYEE:
+            await __check_has_training(s, training_id, token_data.account.id)
+        if token_data.account.type == AccountType.STUDENT:
+            await __check_training(s, training_id, token_data.account.id)
+        await __check_training_has_not_students(s, training_id)
+
+
 @typechecked
 async def token_validate(token: Optional[str]):
     if not token:
@@ -102,7 +123,6 @@ async def log_in(user_id: int, key: str) -> types.LogInData:
         if is_first:
             key_orm.access_key = generate_access_key()
             key_orm.is_first_log_in = False
-        await s.commit()
         token = generate_session_token()
         new_session_orm = SessionOrm(key_id=key_orm.id, token=token, user_id=user_id)
         s.add(new_session_orm)
@@ -519,10 +539,12 @@ async def __training_is_started_check(s: AsyncSession, training_id: int):
 async def training_is_started_check(token: str, training_id: int):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
+        if token_data.account.type == AccountType.STUDENT:
+            await __check_training(s, training_id, token_data.account.id)
         await __training_is_started_check(s, training_id)
 
 
@@ -536,10 +558,12 @@ async def __training_is_not_started_check(s: AsyncSession, training_id: int):
 async def training_is_not_started_check(token: str, training_id: int):
     async with database.session_factory() as s:
         token_data = await __validate_by_token(s, token)
-        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+        if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE, AccountType.STUDENT]:
             raise AccessError()
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
+        if token_data.account.type == AccountType.STUDENT:
+            await __check_training(s, training_id, token_data.account.id)
         await __training_is_not_started_check(s, training_id)
 
 
@@ -556,6 +580,7 @@ async def update_start_msg_training(token: str, training_id: int, msg: list[Mess
         if not training:
             return NotFoundError()
         await __training_is_started_check(s, training_id)
+        await __check_training_has_not_students(s, training_id)
         training.message = msg
         await s.commit()
 
@@ -573,6 +598,7 @@ async def delete_training(token: str, training_id: int):
         if not training:
             return NotFoundError()
         await __training_is_started_check(s, training_id)
+        await __check_training_has_not_students(s, training_id)
         await s.delete(training)
         await s.commit()
 
@@ -590,6 +616,7 @@ async def update_name_training(token: str, training_id: int, name: Optional[str]
         if not training:
             raise NotFoundError
         await __training_is_started_check(s, training_id)
+        await __check_training_has_not_students(s, training_id)
         training.name = name
         await s.commit()
 
@@ -644,6 +671,7 @@ async def create_level(token: str, level_type: str, training_id: int, title: str
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, training_id, token_data.account.id)
         await __training_is_started_check(s, training_id)
+        await __check_training_has_not_students(s, training_id)
         query = await s.execute(select(LevelOrm).filter(LevelOrm.training_id == training_id,
                                                         LevelOrm.next_level_id == None))
         last_level = query.scalars().first()
@@ -670,6 +698,7 @@ async def update_content_level_by_id(token: str, level_type: str, level_id: int,
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
         await __training_is_started_check(s, level.training_id)
+        await __check_training_has_not_students(s, level.training_id)
         level.messages = messages
         level.type = level_type
         await s.commit()
@@ -688,6 +717,7 @@ async def update_title_level_by_id(token: str, level_id: int, title: str):
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
         await __training_is_started_check(s, level.training_id)
+        await __check_training_has_not_students(s, level.training_id)
         level.title = title
         await s.commit()
 
@@ -705,6 +735,7 @@ async def delete_level_by_id(token: str, level_id: int):
         if token_data.account.type == AccountType.EMPLOYEE:
             await __check_has_training(s, level.training_id, token_data.account.id)
         await __training_is_started_check(s, level.training_id)
+        await __check_training_has_not_students(s, level.training_id)
         if level.next_level_id:
             query = await s.execute(select(LevelOrm).filter(LevelOrm.id == level.next_level_id))
             next_level = query.scalars().first()
@@ -863,6 +894,7 @@ async def create_level_answer(token: str, level_id: int,
         if not level:
             raise NotFoundError()
         await __check_training(s, level.training_id, token_data.account.id)
+        await __training_is_not_started_check(s, level.training_id)
         query = await s.execute(select(LevelAnswerOrm).filter(LevelAnswerOrm.level_id == level_id,
                                                               LevelAnswerOrm.account_id == token_data.account.id))
         exist_level_answer = query.scalars().first()
