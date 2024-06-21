@@ -8,7 +8,7 @@ from sqlalchemy import JSON, ForeignKey, BigInteger, TypeDecorator, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 
 from data.asvttk_service import default
-from data.asvttk_service.utils import get_current_time, generate_access_key, generate_session_token
+from data.asvttk_service.utils import get_current_time
 
 
 class AccountType(Enum):
@@ -68,7 +68,7 @@ class SessionOrm(Base):
     __tablename__ = "sessions"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     key_id: Mapped[int] = mapped_column(ForeignKey("keys.id", ondelete="CASCADE"))
-    token: Mapped[str] = mapped_column(default=generate_session_token, unique=True)
+    token: Mapped[str] = mapped_column(unique=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user_states.user_id", ondelete="CASCADE"))
     date_create: Mapped[int] = mapped_column(default=get_current_time)
 

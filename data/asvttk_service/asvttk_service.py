@@ -163,6 +163,18 @@ async def __check_training_has_not_students(s: AsyncSession, training_id: int):
         raise TrainingHasStudentsError()
 
 
+@typechecked()
+async def check_training_has_not_students(token: str, training_id: int):
+    # e: TokenNotValidError, AccessError, NotFoundError
+    async with database.session_factory() as s:
+        token_data = await __validate_by_token(s, token)
+        try:
+            await __check_access_to_get_training(s, training_id, token_data.account.id)
+        except AccountNotFoundError:
+            raise TokenNotValidError()
+        await __check_training_has_not_students(s, training_id)
+
+
 @typechecked
 @handle_exceptions
 async def check_training_is_active(token: Optional[str], training_id: int):
@@ -272,7 +284,7 @@ async def get_all_employees(token: Optional[str]) -> list[EmployeeData]:
         employees_data = []
         for i in employees:
             roles_data = [role_orm_to_role_data(r) for r in i.roles]
-            account_orm_to_employee_data(i, roles_data)
+            employees_data.append(account_orm_to_employee_data(i, roles_data))
         return employees_data
 
 
@@ -490,7 +502,7 @@ async def get_all_roles(token: Optional[str], account_id: Optional[int] = None) 
             account_id = token_data.account.id
         if token_data.account.type == AccountType.EMPLOYEE and account_id != token_data.account.id:
             raise AccessError()
-        query = await __safe_execute(s, select(AccountOrm).options(AccountOrm.roles)
+        query = await __safe_execute(s, select(AccountOrm).options(joinedload(AccountOrm.roles))
                                      .filter(AccountOrm.id == account_id))
         account = query.scalars().unique().first()
         if account.type == AccountType.EMPLOYEE:
