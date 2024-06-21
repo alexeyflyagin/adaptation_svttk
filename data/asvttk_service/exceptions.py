@@ -19,11 +19,19 @@ class EmailValueError(Exception):
     pass
 
 
-class TrainingStateError(Exception):
+class TrainingAlreadyHasThisStateError(Exception):
+    pass
+
+
+class UnknownError(Exception):
     pass
 
 
 class TrainingIsEmptyError(Exception):
+    pass
+
+
+class TrainingNotFoundError(Exception):
     pass
 
 

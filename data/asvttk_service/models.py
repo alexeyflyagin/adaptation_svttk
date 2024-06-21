@@ -58,7 +58,7 @@ class UserStateOrm(Base):
 class KeyOrm(Base):
     __tablename__ = "keys"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    access_key: Mapped[str] = mapped_column(default=generate_access_key, unique=True)
+    access_key: Mapped[str] = mapped_column(unique=True)
     date_create: Mapped[int] = mapped_column(default=get_current_time)
     is_first_log_in: Mapped[bool] = mapped_column(default=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id", ondelete="CASCADE"))
