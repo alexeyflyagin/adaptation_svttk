@@ -1,7 +1,8 @@
+import random
 import time
 from typing import Optional
 
-from data.asvttk_service.exceptions import EmailValueError, InitialsValueError, EmptyFieldError
+from data.asvttk_service.exceptions import EmptyFieldError
 
 
 def get_current_time() -> int:

@@ -14,6 +14,7 @@ from handlers.handlers_utils import delete_msg, log_out, get_token, ADDITIONAL_S
     token_not_valid_error_for_callback
 from handlers.last_handlers import help_handler, show_help
 from src import strings
+from src.types import CD
 from src.utils import get_access_key_link
 from data.asvttk_service import asvttk_service as service
 
@@ -49,7 +50,7 @@ async def log_in_data_callback(callback: CallbackQuery, state: FSMContext):
     token = await get_token(state)
     try:
         if data.action == data.Action.READ_IT:
-            await show_help(token, callback.message, is_answer=False)
+            await show_help(token, state, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
@@ -61,7 +62,7 @@ async def log_in_warning_callback(callback: CallbackQuery, state: FSMContext):
     access_key = data.args
     try:
         if data.is_agree:
-            await service.check_access_key(access_key)
+            await service.check_exist_of_access_key(access_key)
             await log_in(callback.message, callback.from_user.id, state, access_key=access_key)
         await delete_msg(callback.bot, callback.message.chat.id, callback.message.message_id)
     except KeyNotFoundError:

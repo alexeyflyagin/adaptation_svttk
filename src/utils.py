@@ -1,3 +1,5 @@
+import textwrap
+from collections import deque
 from functools import reduce
 from typing import Optional, Any
 
@@ -12,13 +14,13 @@ from data.asvttk_service.models import LevelType, FileType, AccountType
 from data.asvttk_service.types import AccountData, TrainingData
 from src import strings
 
-
 CONTENT_TYPE__MEDIA_GROUP = "media_group"
+CONTENT_TYPE__POLL__QUIZ = "poll_quiz"
+
 START_SESSION_MSG_ID = "start_session_msg_id"
 END_PREVIOUS_SESSION_MSG_ID = "end_previous_session_msg_id"
-UPDATED_MSG_ID = "updated_msg_id"
 UPDATED_MSG = "updated_msg"
-UPDATED_ITEM_ID = "updated_item_id"
+UPDATED_ITEM = "updated_item_id"
 
 
 def get_level_type_from_content_type(content_type: str, arg: Optional[Any] = None) -> str:
@@ -110,10 +112,11 @@ def get_full_name_by_account(account: AccountData, full_patronymic: bool = False
     return s
 
 
-def cut_text(it: str, max_symbols: int = 24):
-    if len(it) > max_symbols:
-        return it[0:max_symbols] + " ..."
-    return it
+def ellipsis_text(it: str, max_length: int = 24, s: str = "...") -> str:
+    if len(it) <= max_length:
+        return it
+    truncated = textwrap.shorten(it, width=max_length - len(s), placeholder="")
+    return truncated + s
 
 
 def is_started_training(training: TrainingData):
@@ -138,16 +141,49 @@ def get_training_status(training: TrainingData):
     return status
 
 
-async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, keyboard=None, is_delete: bool = True):
+async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, keyboard=None,
+               is_delete: bool = True) -> Message:
     try:
         if not is_answer and edited_msg_id:
+            bot_message = msg
             await msg.bot.edit_message_text(text=text, chat_id=msg.chat.id, message_id=edited_msg_id,
                                             reply_markup=keyboard)
         elif not is_answer and not edited_msg_id:
+            bot_message = msg
             await msg.edit_text(text=text, reply_markup=keyboard)
         else:
-            await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
+            bot_message = await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
             if is_delete and edited_msg_id:
-                await msg.bot.edit_message_reply_markup(msg.chat.id, edited_msg_id, reply_markup=None,)
+                await msg.bot.edit_message_reply_markup(msg.chat.id, edited_msg_id, reply_markup=None)
+        return bot_message
     except TelegramBadRequest as _:
         pass
+
+
+def get_content_type_str(content_type: str):
+    if content_type == ContentType.TEXT:
+        return strings.CONTENT_TYPE__TEXT
+    elif content_type == ContentType.PHOTO:
+        return strings.CONTENT_TYPE__PHOTO
+    elif content_type == ContentType.VIDEO:
+        return strings.CONTENT_TYPE__VIDEO
+    elif content_type == ContentType.DOCUMENT:
+        return strings.CONTENT_TYPE__DOCUMENT
+    elif content_type == ContentType.AUDIO:
+        return strings.CONTENT_TYPE__AUDIO
+    elif content_type == ContentType.STICKER:
+        return strings.CONTENT_TYPE__STICKER
+    elif content_type == ContentType.ANIMATION:
+        return strings.CONTENT_TYPE__ANIMATION
+    elif content_type == ContentType.CONTACT:
+        return strings.CONTENT_TYPE__CONTACT
+    elif content_type == ContentType.LOCATION:
+        return strings.CONTENT_TYPE__LOCATION
+    elif content_type == CONTENT_TYPE__POLL__QUIZ:
+        return strings.CONTENT_TYPE__POLL__QUIZ
+    elif content_type == ContentType.POLL:
+        return strings.CONTENT_TYPE__POLL
+    elif content_type == CONTENT_TYPE__MEDIA_GROUP:
+        return strings.CONTENT_TYPE__MEDIA_GROUP
+    else:
+        raise TypeError()

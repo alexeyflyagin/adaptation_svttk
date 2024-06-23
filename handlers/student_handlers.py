@@ -83,8 +83,9 @@ async def learning_callback(callback: CallbackQuery, state: FSMContext):
             await show_current_level(data.token, callback.message, state)
             await callback.message.delete()
         if data.action == data.Action.SHOW:
-            await restart_handler(callback.message, state)
-            await callback.answer()
+            await callback.message.edit_reply_markup(reply_markup=None)
+            await show_current_level(data.token, callback.message, state)
+            await callback.message.delete()
     except TelegramBadRequest:
         pass
     except TrainingIsNotActiveError:
@@ -136,11 +137,16 @@ async def restart_handler(msg: Message, state: FSMContext):
             levels = [i for i in progress.training.levels if i.id in level_answered_ids and i.type == LevelType.INFO]
             await send_msg(msg, progress.training.message)
             try:
-                for level in levels:
-                    await send_msg(msg, level.messages, disable_notification=True)
-                await reset_state(state)
-                await show_current_level(token, msg, state)
-                await wait_msg.delete()
+                if len(level_answered_ids) != 0:
+                    for level in levels:
+                        await send_msg(msg, level.messages, disable_notification=True)
+                    await reset_state(state)
+                    await show_current_level(token, msg, state)
+                    await wait_msg.delete()
+                else:
+                    await reset_state(state)
+                    await show_start(token, msg, state, has_start_level=False)
+                    await wait_msg.delete()
             except TelegramBadRequest:
                 await reset_state(state)
                 await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
@@ -149,10 +155,11 @@ async def restart_handler(msg: Message, state: FSMContext):
         await token_not_valid_error(msg, state)
 
 
-async def show_start(token: str, msg: Message, state: FSMContext):
+async def show_start(token: str, msg: Message, state: FSMContext, has_start_level: bool = True):
     progress = await service.get_student_progress(token)
-    bot_msg = await send_msg(msg, progress.training.message)
-    await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
+    if has_start_level:
+        bot_msg = await send_msg(msg, progress.training.message)
+        await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
     if progress.progress_state != StudentProgressState.START:
         await restart_handler(msg, state)
         return
@@ -168,7 +175,7 @@ async def show_current_level(token: str, msg: Message, state: FSMContext):
             await msg.answer(text, message_effect_id=CONFETTI_MSG_EFFECT_ID)
             return
         level_msg = await send_msg(msg, progress.current_level.messages)
-        await service.training_is_not_started_check(token, progress.training.id)
+        await service.check_training_is_active(token, progress.training.id)
         if progress.current_level.type == LevelType.QUIZ:
             await state.update_data({CLD: [level_msg.model_dump_json(), progress.current_level.id]})
         if progress.current_level.type == LevelType.INFO:

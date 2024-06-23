@@ -1,7 +1,7 @@
 import asyncio
 
 from aiogram import Router
-from aiogram.filters import CommandObject, Command
+from aiogram.filters import CommandObject, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
@@ -14,13 +14,13 @@ from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
     TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, \
-    TrainingStartEditStates, LevelEditStates, StudentCreateState
-
+    TrainingStartEditStates, LevelEditStates, StudentCreateState, MainStates
 
 router = Router()
 
 
-@router.message(Command(commands.START))
+@router.message(MainStates(), Command(commands.START))
+@router.message(StateFilter(None), Command(commands.START))
 async def start_handler(msg: Message, state: FSMContext, command: CommandObject):
     access_key = command.args
     state_data = await state.get_data()
@@ -36,7 +36,7 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
             await add_additional_msg_id(state, bot_msg.message_id)
         return
     try:
-        await service.check_access_key(access_key)
+        await service.check_exist_of_access_key(access_key)
         try:
             if token is None:
                 raise TokenNotValidError()

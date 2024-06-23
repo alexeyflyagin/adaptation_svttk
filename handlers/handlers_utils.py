@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, Any
 
 from aiogram import Bot
 from aiogram.enums import ContentType, PollType
@@ -12,8 +12,7 @@ from data.asvttk_service.models import AccountType
 from src import strings
 from src.states import MainStates
 from data.asvttk_service import asvttk_service as service
-from src.utils import get_input_media_by_level_type, START_SESSION_MSG_ID
-
+from src.utils import get_input_media_by_level_type, START_SESSION_MSG_ID, UPDATED_MSG, UPDATED_ITEM
 
 ADDITIONAL_SESSION_MSG_IDS = "additional_session_msgs"
 
@@ -38,6 +37,38 @@ async def get_token(state: FSMContext):
     return state_token
 
 
+async def set_updated_msg(state: FSMContext, message_id: int, args: Optional[list[Any]] = None):
+    await state.update_data({UPDATED_MSG: (message_id, args)})
+
+
+async def get_updated_msg(state: FSMContext):
+    state_data = await state.get_data()
+    update_msg = state_data.get(UPDATED_MSG, None)
+    if update_msg is None:
+        raise ValueError()
+    if UPDATED_MSG in state_data:
+        state_data.pop(UPDATED_MSG)
+    return update_msg
+
+
+async def set_updated_item(state: FSMContext, item_id: int, args: Optional[list[Any]] = None):
+    await state.update_data({UPDATED_ITEM: (item_id, args)})
+
+
+async def get_updated_item(state: FSMContext):
+    state_data = await state.get_data()
+    update_msg = state_data.get(UPDATED_ITEM, None)
+    if update_msg is None:
+        raise ValueError()
+    return update_msg
+
+
+async def delete_updated_item(state: FSMContext):
+    state_data = await state.get_data()
+    if UPDATED_ITEM in state_data:
+        state_data.pop(UPDATED_ITEM)
+
+
 async def token_not_valid_error(msg: Message, state: FSMContext):
     await log_out(msg, state, log_out_text=strings.SESSION_ERROR)
 
@@ -45,6 +76,30 @@ async def token_not_valid_error(msg: Message, state: FSMContext):
 async def token_not_valid_error_for_callback(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup(inline_message_id=None)
     await log_out(callback.message, state, log_out_text=strings.SESSION_ERROR)
+
+
+async def unknown_error(msg: Message, state: FSMContext, canceled: bool = True) -> Message:
+    res = await msg.answer(strings.ERROR__UNKNOWN)
+    if canceled:
+        await msg.answer(strings.ACTION_CANCELED)
+    await reset_state(state)
+    return res
+
+
+async def unknown_error_for_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer(strings.ERROR__UNKNOWN)
+
+
+async def access_error(msg: Message, state: FSMContext, canceled: bool = True):
+    res = await msg.answer(strings.ERROR__ACCESS)
+    if canceled:
+        await msg.answer(strings.ACTION_CANCELED)
+    await reset_state(state)
+    return res
+
+
+async def access_error_for_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer(strings.ERROR__ACCESS)
 
 
 async def delete_msg(bot: Bot, chat_id: int, msg_id: int):
@@ -151,7 +206,7 @@ async def log_out(msg: Message, state: FSMContext, new_token: Optional[str] = No
         await delete_msg(msg.bot, msg.chat.id, log_out_msg.message_id)
 
 
-def get_content_type_srt(msgs: [Message]):
+def get_content_type_str(msgs: list[Message]):
     if len(msgs) == 0:
         raise ValueError()
     msg = msgs[0]

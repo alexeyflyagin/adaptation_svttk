@@ -108,7 +108,7 @@ async def show_my_account(token: str, msg: Message, edited_msg_id: Optional[int]
 
 
 async def show_log_in_data(token: str, msg: Message):
-    log_in_data = await service.get_log_in_data_token(token)
+    log_in_data = await service.get_log_in_data_by_token(token)
     account = await service.get_account_by_token(token)
     keyboard = get_log_in_data_keyboard(account.first_name, log_in_data.access_key, has_read_it=False)
     text = strings.LOG_IN__DATA.format(first_name=account.first_name, access_key=log_in_data.access_key)

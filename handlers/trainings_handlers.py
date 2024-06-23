@@ -11,22 +11,23 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_album import AlbumMessage
 
-from data.asvttk_service.exceptions import TokenNotValidError, AccessError, EmptyFieldError, NotFoundError, \
-    TrainingStateError, TrainingIsActiveError, TrainingIsNotActiveError, InitialsValueError, TrainingHasStudentsError, \
-    TrainingIsEmptyError
+from data.asvttk_service.exceptions import (TokenNotValidError, AccessError, EmptyFieldError, NotFoundError,
+                                            TrainingAlreadyHasThisStateError, TrainingIsActiveError,
+                                            TrainingIsNotActiveError, InitialsValueError,
+                                            TrainingHasStudentsError, TrainingIsEmptyError)
 from data.asvttk_service.models import LevelType, AccountType
 from data.asvttk_service.types import TrainingData, StudentData
 from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
 from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, list_keyboard, get_items_by_page, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state, \
-    send_msg, get_content_type_srt, get_content_text
+    send_msg, get_content_text
 from data.asvttk_service import asvttk_service as service
 from src import commands, strings
 from src.keyboards import invite_keyboard
 from src.states import MainStates, TrainingCreateStates, TrainingEditNameStates, LevelCreateStates, \
     TrainingStartEditStates, LevelEditStates, StudentCreateState
 from src.strings import blockquote
-from src.utils import show, cut_text, get_training_status, CONTENT_TYPE__MEDIA_GROUP, UPDATED_MSG, UPDATED_ITEM_ID, \
+from src.utils import show, ellipsis_text, get_training_status, CONTENT_TYPE__MEDIA_GROUP, UPDATED_MSG, UPDATED_ITEM, \
     get_level_type_from_content_type, is_started_training, get_full_name_by_account, get_initials_from_text, \
     get_access_key_link
 
@@ -207,18 +208,18 @@ async def training_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_trainings(data.token, callback.message, data.page_index, is_answer=False)
         elif data.action == data.Action.DELETE:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__DELETE.format(training_name=training.name)
             await show_confirmation(data.token, callback.message, tag=TAG_TRAINING_DELETE, item_id=data.training_id,
                                     args=data.page_index, is_answer=False, text=text)
         elif data.action == data.Action.EDIT_NAME:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             await state.set_state(TrainingEditNameStates.NAME)
             await callback.message.answer(strings.TRAINING__EDIT_NAME)
-            await state.update_data({UPDATED_ITEM_ID: data.training_id})
+            await state.update_data({UPDATED_ITEM: data.training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         elif data.action == data.Action.LEVELS:
             await show_levels(data.token, data.training_id, callback.message, is_answer=False)
@@ -254,11 +255,11 @@ async def students_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_training(data.token, training_id, callback.message, is_answer=False)
         elif data.action == data.Action.ADD:
-            await service.training_is_not_started_check(data.token, training_id)
+            await service.check_training_is_active(data.token, training_id)
             await reset_state(state)
             await callback.message.answer(strings.STUDENTS__ENTER__FULL_NAME)
             await state.set_state(StudentCreateState.FULL_NAME)
-            await state.update_data({UPDATED_ITEM_ID: training_id})
+            await state.update_data({UPDATED_ITEM: training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
         await callback.answer()
     except TrainingIsNotActiveError:
@@ -275,7 +276,7 @@ async def create_student_handler(msg: Message, state: FSMContext):
         if msg.content_type != ContentType.TEXT:
             raise InitialsValueError()
         state_date = await state.get_data()
-        updated_item_id = state_date.get(UPDATED_ITEM_ID, None)
+        updated_item_id = state_date.get(UPDATED_ITEM, None)
         initials = get_initials_from_text(msg.text, has_none=True)
         acc_data = await service.create_student(token, updated_item_id, initials[1], initials[0], initials[2])
         training = await service.get_training_by_id(token, updated_item_id)
@@ -317,7 +318,7 @@ async def start_training_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer(strings.TRAINING__STARTED__ERROR__TRAINING_IS_EMPTY)
     except NotFoundError:
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
-    except TrainingStateError:
+    except TrainingAlreadyHasThisStateError:
         await callback.answer(strings.TRAINING__STARTED__ERROR__ALREADY_STARTED)
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
@@ -338,7 +339,7 @@ async def stop_training_callback(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
     except NotFoundError:
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
-    except TrainingStateError:
+    except TrainingAlreadyHasThisStateError:
         await callback.answer(strings.TRAINING__STARTED__ERROR__NOT_STARTED)
         await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
     except TokenNotValidError:
@@ -367,7 +368,7 @@ async def delete_training_callback(callback: CallbackQuery, state: FSMContext):
         await token_not_valid_error_for_callback(callback, state)
 
 
-@router.message(TrainingCreateStates.NAME)
+@router.message(TrainingCreateStates.NAME, F.content_type == ContentType.TEXT)
 async def create_training_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
@@ -421,7 +422,7 @@ async def edit_name_training_handler(msg: Message, state: FSMContext):
         return
     try:
         state_data = await state.get_data()
-        employee_id = state_data.get(UPDATED_ITEM_ID)
+        employee_id = state_data.get(UPDATED_ITEM)
         update_msg = state_data.get(UPDATED_MSG)
         await service.update_name_training(token, employee_id, name=msg.text)
         await msg.answer(strings.TRAINING__EDIT_NAME__SUCCESS)
@@ -450,12 +451,12 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
         if data.action == data.Action.BACK:
             await show_training(data.token, training_id, callback.message, is_answer=False)
         elif data.action == data.Action.ADD:
-            await service.training_is_started_check(data.token, training_id)
+            await service.check_training_is_not_active(data.token, training_id)
             await service.check_training_has_not_students(data.token, training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL__TITLE)
             await state.set_state(LevelCreateStates.TITLE)
-            await state.update_data({UPDATED_ITEM_ID: training_id})
+            await state.update_data({UPDATED_ITEM: training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         elif data.action == data.Action.SELECT and data.selected_item_id != -1:
             await show_about_level(data.token, callback.message, training_id, data.selected_item_id, is_answer=False)
@@ -486,30 +487,30 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
             await show_about_level(data.token, callback.message, data.training_id, level.previous_level_id,
                                    is_answer=False)
         elif data.action == data.Action.DELETE:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             level = await service.get_level_by_id(data.token, data.level_id)
-            text = strings.LEVEL__DELETE.format(level_name=cut_text(level.title),
-                                                training_name=cut_text(level.training.name))
+            text = strings.LEVEL__DELETE.format(level_name=ellipsis_text(level.title),
+                                                training_name=ellipsis_text(level.training.name))
             await show_confirmation(data.token, callback.message, data.level_id, text, TAG_DELETE_LEVEL,
                                     is_answer=False,
                                     args=data.training_id)
         elif data.action == data.Action.COUNTER:
             await show_level(data.token, callback.message, data.level_id)
         elif data.action == data.Action.EDIT:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL_CONTENT)
             await state.set_state(LevelEditStates.CONTENT)
-            await state.update_data({UPDATED_ITEM_ID: data.level_id})
+            await state.update_data({UPDATED_ITEM: data.level_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         elif data.action == data.Action.EDIT_TITLE:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL__TITLE)
             await state.set_state(LevelEditStates.TITLE)
-            await state.update_data({UPDATED_ITEM_ID: data.level_id})
+            await state.update_data({UPDATED_ITEM: data.level_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         await callback.answer()
     except TrainingHasStudentsError:
@@ -532,7 +533,7 @@ async def delete_level_callback(callback: CallbackQuery, state: FSMContext):
             level = await service.get_level_by_id(data.token, data.item_id)
             await service.delete_level_by_id(data.token, data.item_id)
             await show_levels(data.token, training_id, callback.message, is_answer=False)
-            await callback.answer(strings.LEVEL__DELETED.format(level_name=cut_text(level.title)))
+            await callback.answer(strings.LEVEL__DELETED.format(level_name=ellipsis_text(level.title)))
         else:
             await show_about_level(data.token, callback.message, training_id, data.item_id, is_answer=False)
             await callback.answer()
@@ -555,7 +556,7 @@ async def edit_level_title_handler(msg: Message, state: FSMContext):
     try:
         await service.token_validate(token)
         state_data = await state.get_data()
-        level_id = state_data[UPDATED_ITEM_ID]
+        level_id = state_data[UPDATED_ITEM]
         await service.update_title_level_by_id(token, level_id, msg.text)
         await msg.answer(strings.EDIT_TITLE_LEVEL__SUCCESS)
         updated_msg = state_data[UPDATED_MSG]
@@ -586,7 +587,7 @@ async def edit_level_content_handler(msg: AlbumMessage, state: FSMContext):
         else:
             level_type = get_level_type_from_content_type(msg.content_type)
         state_data = await state.get_data()
-        level_id = state_data[UPDATED_ITEM_ID]
+        level_id = state_data[UPDATED_ITEM]
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.update_content_level_by_id(token, level_type=level_type, level_id=level_id, messages=messages)
         await msg.answer(strings.EDIT_CONTENT_LEVEL__SUCCESS)
@@ -620,12 +621,12 @@ async def start_level_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.SHOW:
             await show_start_level(data.token, callback.message, data.training_id)
         elif data.action == data.Action.EDIT:
-            await service.training_is_started_check(data.token, data.training_id)
+            await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             await reset_state(state)
             await callback.message.answer(strings.TRAINING__START__EDIT__CONTENT)
             await state.set_state(TrainingStartEditStates.CONTENT)
-            await state.update_data({UPDATED_ITEM_ID: data.training_id})
+            await state.update_data({UPDATED_ITEM: data.training_id})
             await state.update_data({UPDATED_MSG: [callback.message.message_id]})
         await callback.answer()
     except TrainingHasStudentsError:
@@ -646,7 +647,7 @@ async def edit_start_level_handler(msg: AlbumMessage, state: FSMContext):
             raise TypeError()
         await service.token_validate(token)
         state_data = await state.get_data()
-        training_id = state_data[UPDATED_ITEM_ID]
+        training_id = state_data[UPDATED_ITEM]
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.update_start_msg_training(token, training_id=training_id, msg=messages)
         await msg.answer(strings.TRAINING__START__EDIT__CONTENT__SUCCESS)
@@ -702,7 +703,7 @@ async def create_level_content_handler(msg: AlbumMessage, state: FSMContext):
             level_type = get_level_type_from_content_type(msg.content_type)
         state_data = await state.get_data()
         title = state_data[CREATE_LEVEL_TITLE]
-        training_id = state_data[UPDATED_ITEM_ID]
+        training_id = state_data[UPDATED_ITEM]
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.create_level(token, level_type=level_type, training_id=training_id, title=title,
                                    messages=messages)
@@ -739,7 +740,7 @@ async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_m
         for i in range(len(trainings)):
             str_items.append(strings.TRAININGS_ITEM.format(
                 index=items[i].name,
-                title=cut_text(trainings[i].name),
+                title=ellipsis_text(trainings[i].name),
                 status=get_training_status(trainings[i]),
                 student_counter=len(trainings[i].students),
             ))
@@ -794,7 +795,7 @@ async def show_levels(token: str, training_id: int, msg: Message,
         items_str = [
             strings.TRAININGS__LEVELS__ITEM__NO_INDEX.format(
                 type_icon=strings.TRAININGS__LEVELS__ITEM__TYPE__START_I,
-                level_title=cut_text(get_content_text(training.message).strip()),
+                level_title=ellipsis_text(get_content_text(training.message).strip()),
             )
         ]
         for item in list_item:
@@ -806,10 +807,10 @@ async def show_levels(token: str, training_id: int, msg: Message,
             item_str = strings.TRAININGS__LEVELS__ITEM.format(
                 type_icon=icon_type_str,
                 index=item.name,
-                level_title=cut_text(item.obj.title),
+                level_title=ellipsis_text(item.obj.title),
             )
             items_str.append(item_str)
-        text = strings.TRAINING__LEVELS.format(training_name=cut_text(training.name), items="\n".join(items_str))
+        text = strings.TRAINING__LEVELS.format(training_name=ellipsis_text(training.name), items="\n".join(items_str))
         await show(msg, text=text, is_answer=is_answer, edited_msg_id=edited_msg_id, keyboard=keyboard)
     except NotFoundError:
         await show_trainings(token, msg, is_answer=False)
@@ -832,7 +833,7 @@ async def show_about_level(token: str, msg: Message, training_id: int, level_id:
         content_text = "\n—\n" + blockquote(content_text, expand=True) if content_text else ""
         date_create = datetime.fromtimestamp(level.date_create).strftime(strings.DATE_FORMAT_FULL)
         text = strings.LEVEL.format(type_icon=icon_type_str, index=level.order, level_name=level.title,
-                                    data_create=date_create, training_name=cut_text(level.training.name),
+                                    data_create=date_create, training_name=ellipsis_text(level.training.name),
                                     level_type=icon_type_str, content_type=content_type,
                                     level_type_icon=icon_type_icon) + content_text
         keyboard = level_keyboard(token, training_id, level_id, level.order, len(levels))
@@ -865,7 +866,7 @@ async def show_about_start_level(token: str, msg: Message, training_id: int, edi
         training = await service.get_training_by_id(token, training_id)
         content_text = "\n—\n" + blockquote(get_content_text(training.message), expand=True)
         has_preview = "🖼" if training.msg.content_type == ContentType.PHOTO else strings.EMPTY_FIELD
-        text = strings.TRAINING__START_LEVEL.format(training_name=cut_text(training.name),
+        text = strings.TRAINING__START_LEVEL.format(training_name=ellipsis_text(training.name),
                                                     has_preview=has_preview) + content_text
         keyboard = training_start_keyboard(token, training_id)
         await show(msg, text, is_answer, edited_msg_id, keyboard=keyboard)
@@ -888,9 +889,9 @@ async def show_students(token: str, msg: Message, training_id: int, edited_msg_i
             student: StudentData = item.obj
             student_item = strings.STUDENT_ITEM.format(index=item.name, full_name=get_full_name_by_account(student))
             student_items.append(student_item)
-        text = strings.STUDENTS.format(training_name=cut_text(training.name), items="\n".join(student_items))
+        text = strings.STUDENTS.format(training_name=ellipsis_text(training.name), items="\n".join(student_items))
         if not students:
-            text = strings.STUDENTS__EMPTY.format(training_name=cut_text(training.name))
+            text = strings.STUDENTS__EMPTY.format(training_name=ellipsis_text(training.name))
         await show(msg, text, is_answer, edited_msg_id, keyboard=keyboard)
     except NotFoundError:
         await show_training(token, training_id, msg, is_answer=False)

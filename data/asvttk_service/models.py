@@ -157,9 +157,7 @@ class TrainingOrm(Base):
     date_end: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     students = relationship("AccountOrm", back_populates="training", cascade="all, delete")
-    roles = relationship(
-        "RoleOrm", secondary="training_and_roles", secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
-        primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings",
-        cascade="all, delete"
-    )
+    roles = relationship("RoleOrm", secondary="training_and_roles",
+                         secondaryjoin="RoleOrm.id == TrainingAndRoleOrm.role_id",
+                         primaryjoin="TrainingOrm.id == TrainingAndRoleOrm.training_id", back_populates="trainings")
     levels = relationship("LevelOrm", back_populates="training", cascade="all, delete")

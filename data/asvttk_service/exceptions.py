@@ -15,10 +15,6 @@ class TrainingIsNotActiveError(Exception):
     pass
 
 
-class EmailValueError(Exception):
-    pass
-
-
 class TrainingAlreadyHasThisStateError(Exception):
     pass
 

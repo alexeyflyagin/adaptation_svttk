@@ -101,7 +101,7 @@ async def __generate_session_token(s: AsyncSession):
     sessions = query.scalars().all()
     tokens = [i.token for i in sessions]
     while True:
-        res = str(uuid.uuid4()).replace("-", "")[16:]
+        res = str(uuid.uuid4()).replace("-", "")[20:]
         if res not in tokens:
             break
     return res

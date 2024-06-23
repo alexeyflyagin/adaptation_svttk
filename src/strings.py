@@ -1,5 +1,7 @@
 from typing import Optional
 
+from aiogram.types import BotCommand
+
 from src import commands
 
 
@@ -16,6 +18,16 @@ def blockquote(it: str, expand: bool = True):
         return f"<blockquote expandable>{it}</blockquote>"
     else:
         return f"<blockquote>{it}</blockquote>"
+
+
+def command(it: "BotCommand", no_description: bool = False) -> str:
+    if no_description:
+        return f"/{it.command}"
+    return f"/{it.command} - {it.description}"
+
+
+def error_value(error_msg: str) -> str:
+    return ERROR__VALUE__CANCELED.format(error_msg=error_msg)
 
 
 # BTNs
@@ -75,6 +87,7 @@ CONTENT_TYPE__LOCATION = "Геопозиция"
 CONTENT_TYPE__POLL = "Опрос"
 CONTENT_TYPE__POLL__QUIZ = "Опрос-викторина"
 
+
 # General
 SESSION_ERROR = f"""Ошибка! Истек срок сессии."""
 
@@ -85,6 +98,14 @@ ACTION_CANCELED = f"""Действие отменено."""
 WAIT_CLEAR_PREVIOUS_SESSION = f"""🔴 Дождитесь завершение предыдущей сессии..."""
 
 WAIT_UPDATING = f"""🔴 Подождите, идет обновление..."""
+
+ERROR__UNKNOWN = f"""Ошибка! Что-то пошло не так. Попробуйте позже..."""
+
+ERROR__ACCESS = f"""Ошибка! У вас недостаточно прав."""
+
+ERROR__VALUE__CANCELED = f"""<b>Ошибка!</b> {{error_msg}}
+
+Попробуйте еще раз или отмените действие {command(commands.CANCEL, True)}."""
 
 # LogIn
 LOG_IN__SUCCESS = f"""👋  Добрый день, <code>{{first_name}}</code>."""
@@ -119,7 +140,7 @@ LOG_IN_DATA__INSTRUCTION = """📖  <b>Зачем это нужно?</b>
 После подтверждения вам будет прислано сообщение на 1 минуту, содержащее в себе ключ доступа в удобном виде. Вам необходимо сохранить это сообщение, переслав его в любой безопасный чат."""
 
 LOG_IN__ACCOUNT_NOT_FOUND = """
-<b>Ошибка!</b> Аккаунт не найден.
+<b>Ошибка!</b> Аккаунт не найден. Возможно он был удален ранее.
 """
 
 LOG_IN__NO_ACCESS_KEY = """
@@ -159,21 +180,11 @@ CREATE_ROLE__ENTER_NAME = f"""Введите название роли.
 
 /{commands.CANCEL.command} - {commands.CANCEL.description}"""
 
-CREATE_ROLE__ENTER_NAME__TOO_LONGER_ERROR = f"""<b>Ошибка!</b> Это слишком длинное название <i>(Максимум 15 символов)</i>. Попробуйте еще раз.
-
-/{commands.CANCEL.command} - {commands.CANCEL.description}"""
-
-CREATE_ROLE__ENTER_NAME__UNIQUE_NAME_ERROR = f"""<b>Ошибка!</b> Роль с таким названием уже существует. Попробуйте еще раз.
-
-/{commands.CANCEL.command} - {commands.CANCEL.description}"""
-
-CREATE_ROLE__ERROR_FORMAT = f"""<b>Ошибка!</b> Формат названия для роли некорректен. Попробуйте еще раз.
-
-/{commands.CANCEL.command} - {commands.CANCEL.description}"""
+VALUE_ERROR__ROLE__UNIQUE_NAME_ERROR = f"""Роль с таким именем уже существует."""
 
 CREATE_ROLE__SUCCESS = f"""Новая роль с именем '<code>{{role_name}}</code>' успешно создана!"""
 
-ROLE__RENAME = f"""Введите новое название для роли '<code>{{role_name}}</code>'.
+RENAME_ROLE__ENTER_NAME = f"""Введите новое название для роли '<code>{{role_name}}</code>'.
 <i>(Максимум 15 символов)</i>
 
 /{commands.ROLES.command} - {commands.ROLES.description}"""
@@ -192,7 +203,7 @@ ROLE_DELETE = f"""После подтверждения действия, рол
 
 ROLE_DELETED = f"""Роль '{{role_name}}' удалена!"""
 
-ROLE__NOT_FOUND = f"""Ошибка! Роль не найдена."""
+ROLE__NOT_FOUND = f"""Ошибка! Роль не найдена. Возможно она была удалена ранее."""
 
 ROLE__TRAININGS = f"""Все курсы у роли  '<code>{{role_name}}</code>'.
 —
@@ -238,7 +249,7 @@ EMPLOYEE = """Сотрудник
 Email: {email}
 Роли:  {roles_list}"""
 
-EMPLOYEE__NOT_FOUND = """Ошибка! Сотрудник не найден."""
+EMPLOYEE__NOT_FOUND = """Ошибка! Сотрудник не найден. Возможно она был удален ранее."""
 
 EMPLOYEE__DELETED = """Сотрудник успешно удален."""
 
@@ -297,7 +308,7 @@ TRAINING_HAS_STUDENTS_ERROR = """Ошибка! Необходимо удалит
 TRAINING_IS_NOT_STARTED_ERROR = """Ошибка! Необходимо запустить курс."""
 
 TRAININGS_ITEM = """<b>{index}</b>  <b>{title}</b>
-{status} | {student_counter}"""
+{status} | Учеников: {student_counter}"""
 
 TRAININGS = """
 {items}
@@ -326,7 +337,7 @@ CREATE_TRAINING__ROLE__SELECTED = f"""Выберите роль, которой 
 
 CREATE_TRAINING__CREATED = f"""Новый курс успешно создан."""
 
-TRAINING__NOT_FOUND = """Курс не найден."""
+TRAINING__NOT_FOUND = """Курс не найден.  Возможно он был удален ранее."""
 
 TRAINING = """<code>{name}</code>
 Статус:  {status}
@@ -436,7 +447,7 @@ EDIT_CONTENT_LEVEL__SUCCESS = f"""Контент уровня успешно и�
 
 EDIT_TITLE_LEVEL__SUCCESS = f"""Заголовок уровня успешно изменен!"""
 
-LEVEL__NOT_FOUND = f"""Уровень не найден."""
+LEVEL__NOT_FOUND = f"""Уровень не найден. Возможно он был удален ранее."""
 
 LEVEL__ERROR__VIEW = f"""<b>Ошибка!</b> Не удалось отобразить уровень."""
 
