@@ -11,11 +11,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import TokenNotValidError, LevelAnswerAlreadyExistsError, \
-    TrainingIsNotActiveError
+    TrainingIsNotActiveError, UnknownError, NotFoundError, AccessError
 from data.asvttk_service.models import LevelType
 from data.asvttk_service.types import StudentProgressState, StudentProgressData
 from handlers.handlers_utils import send_msg, token_not_valid_error_for_callback, get_token, delete_msg, \
-    token_not_valid_error, reset_state
+    token_not_valid_error, reset_state, unknown_error_for_callback, unknown_error
 from src import strings, commands
 from src.states import MainStates
 
@@ -94,6 +94,8 @@ async def learning_callback(callback: CallbackQuery, state: FSMContext):
         await restart_handler(callback.message, state)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except (UnknownError, NotFoundError, AccessError):
+        await unknown_error_for_callback(callback, state)
 
 
 @router.poll_answer(MainStates.STUDENT)
@@ -115,6 +117,8 @@ async def poll_answer_handler(answer: PollAnswer, state: FSMContext):
         await msg.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state, canceled=False)
 
 
 @router.message(MainStates.STUDENT, Command(commands.HELP))
@@ -151,25 +155,32 @@ async def restart_handler(msg: Message, state: FSMContext):
                 await reset_state(state)
                 await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
                 await wait_msg.delete()
-    except TokenNotValidError:
+    except (TokenNotValidError, NotFoundError):
         await token_not_valid_error(msg, state)
+    except (UnknownError, AccessError):
+        await unknown_error(msg, state)
 
 
 async def show_start(token: str, msg: Message, state: FSMContext, has_start_level: bool = True):
-    progress = await service.get_student_progress(token)
-    if has_start_level:
-        bot_msg = await send_msg(msg, progress.training.message)
-        await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
-    if progress.progress_state != StudentProgressState.START:
-        await restart_handler(msg, state)
-        return
-    keyboard = start_keyboard(token, progress.current_level.id, progress.progress_state, progress.current_level.type)
-    await msg.answer(text=strings.TRAINING_PROGRESS__BEGIN, reply_markup=keyboard)
+    try:
+        progress = await service.get_student_progress(token)
+        if has_start_level:
+            bot_msg = await send_msg(msg, progress.training.message)
+            await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
+        if progress.progress_state != StudentProgressState.START:
+            await restart_handler(msg, state)
+            return
+        keyboard = start_keyboard(token, progress.current_level.id, progress.progress_state, progress.current_level.type)
+        await msg.answer(text=strings.TRAINING_PROGRESS__BEGIN, reply_markup=keyboard)
+    except NotFoundError:
+        raise TokenNotValidError()
+    except AccessError:
+        raise UnknownError()
 
 
 async def show_current_level(token: str, msg: Message, state: FSMContext):
-    progress = await service.get_student_progress(token)
     try:
+        progress = await service.get_student_progress(token)
         if progress.progress_state == StudentProgressState.COMPLETED:
             text = strings.TRAINING_PROGRESS__COMPLETED.format(training_name=progress.training.name)
             await msg.answer(text, message_effect_id=CONFETTI_MSG_EFFECT_ID)
@@ -184,11 +195,20 @@ async def show_current_level(token: str, msg: Message, state: FSMContext):
         await msg.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
     except TelegramBadRequest:
         await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
+    except NotFoundError:
+        raise TokenNotValidError()
+    except AccessError:
+        raise UnknownError()
 
 
 async def show_next_keyboard(token: str, msg: Message, progress: Optional[StudentProgressData] = None):
-    if not progress:
-        progress = await service.get_student_progress(token)
-    keyboard = next_keyboard(token, progress.current_level.id, progress.current_level.type)
-    text = strings.TRAINING_PROGRESS__NEXT__INFO
-    await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
+    try:
+        if not progress:
+            progress = await service.get_student_progress(token)
+        keyboard = next_keyboard(token, progress.current_level.id, progress.current_level.type)
+        text = strings.TRAINING_PROGRESS__NEXT__INFO
+        await msg.answer(text=text, reply_markup=keyboard, disable_notification=True)
+    except NotFoundError:
+        raise TokenNotValidError()
+    except AccessError:
+        raise UnknownError()

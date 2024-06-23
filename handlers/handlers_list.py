@@ -6,10 +6,9 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src import strings
-from src.types import CALLBACK_DATA_SEP
 
 
-class ListCD(CallbackData, prefix="list", sep=CALLBACK_DATA_SEP):
+class ListCD(CallbackData, prefix="list"):
     token: str
     tag: str
     page_index: int

@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional
 
 from aiogram import Router, F
 from aiogram.enums import ContentType, PollType
@@ -11,42 +11,47 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram_album import AlbumMessage
 
-from data.asvttk_service.exceptions import (TokenNotValidError, AccessError, EmptyFieldError, NotFoundError,
+from data.asvttk_service.exceptions import (TokenNotValidError, AccessError, NotFoundError,
                                             TrainingAlreadyHasThisStateError, TrainingIsActiveError,
-                                            TrainingIsNotActiveError, InitialsValueError,
-                                            TrainingHasStudentsError, TrainingIsEmptyError)
+                                            TrainingIsNotActiveError,
+                                            TrainingHasStudentsError, TrainingIsEmptyError, UnknownError,
+                                            TrainingNotFoundError, NotChooseRoleError)
 from data.asvttk_service.models import LevelType, AccountType
 from data.asvttk_service.types import TrainingData, StudentData
 from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
 from handlers.handlers_list import ListItem, get_pages, get_safe_page_index, list_keyboard, get_items_by_page, ListCD
 from handlers.handlers_utils import get_token, token_not_valid_error, token_not_valid_error_for_callback, reset_state, \
-    send_msg, get_content_text
+    send_msg, get_content_text, unknown_error, unknown_error_for_callback, set_updated_msg, access_error_for_callback, \
+    set_updated_item, get_updated_item, get_updated_msg, access_error, get_content_type_str
 from data.asvttk_service import asvttk_service as service
+from handlers.value_validators import valid_content_type_msg, valid_full_name, ValueNotValidError, valid_name
 from src import commands, strings
 from src.keyboards import invite_keyboard
 from src.states import MainStates, TrainingCreateStates, TrainingEditNameStates, LevelCreateStates, \
     TrainingStartEditStates, LevelEditStates, StudentCreateState
 from src.strings import blockquote
-from src.utils import show, ellipsis_text, get_training_status, CONTENT_TYPE__MEDIA_GROUP, UPDATED_MSG, UPDATED_ITEM, \
-    get_level_type_from_content_type, is_started_training, get_full_name_by_account, get_initials_from_text, \
-    get_access_key_link
+from src.utils import show, ellipsis_text, get_training_status, CONTENT_TYPE__MEDIA_GROUP, \
+    get_level_type_from_content_type, is_started_training, get_full_name_by_account, get_access_key_link, \
+    CONTENT_TYPE__POLL__QUIZ
 
 router = Router()
 
-TAG_TRAININGS = "trainings"
-TAG_STUDENTS = "students"
-TAG_CHOOSE_ROLE = "choose_role"
-TAG_TRAINING_DELETE = "training_del"
-TAG_TRAINING_START = "training_st"
-TAG_TRAINING_STOP = "training_en"
-TAG_LEVELS = "levels"
-TAG_DELETE_LEVEL = "level_del"
+TAG_TRAININGS = "trains"
+TAG_STUDENTS = "stud"
+TAG_CHOOSE_ROLE = "ch_role"
+TAG_TRAINING_DELETE = "t_del"
+TAG_TRAINING_START = "t_st"
+TAG_TRAINING_STOP = "t_en"
+TAG_LEVELS = "l"
+TAG_DELETE_LEVEL = "l_del"
+
+NEW_TRAINING_NAME = "new_training_name"
+NEW_LEVEL_TITLE = "new_level_title"
 
 
-class TrainingCD(CallbackData, prefix="training"):
+class TrainingCD(CallbackData, prefix="t"):
     token: str
     training_id: Optional[int] = None
-    page_index: int
     action: int
 
     class Action:
@@ -59,7 +64,7 @@ class TrainingCD(CallbackData, prefix="training"):
         STUDENTS = 6
 
 
-class LevelCD(CallbackData, prefix="level"):
+class LevelCD(CallbackData, prefix="l"):
     token: str
     level_id: Optional[int] = None
     training_id: int
@@ -75,7 +80,7 @@ class LevelCD(CallbackData, prefix="level"):
         EDIT = 6
 
 
-class TrainingStartCD(CallbackData, prefix="training_start"):
+class StartLevelCD(CallbackData, prefix="st_l"):
     token: str
     training_id: int
     action: int
@@ -86,36 +91,30 @@ class TrainingStartCD(CallbackData, prefix="training_start"):
         EDIT = 2
 
 
-def training_keyboard(token: str, page_index: int, training_id: Optional[int] = None, is_started: bool = False,
+def training_keyboard(token: str, training_id: Optional[int] = None, is_started: bool = False,
                       student_counter: Optional[int] = None, level_counter: Optional[int] = None):
     kbb = InlineKeyboardBuilder()
     adjust = []
     if training_id:
         if is_started:
-            btn_stop_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                       action=TrainingCD.Action.STOP)
+            btn_stop_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.STOP)
             kbb.add(InlineKeyboardButton(text=strings.BTN_TRAINING_STOP, callback_data=btn_stop_data.pack()))
         else:
-            btn_start_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                        action=TrainingCD.Action.START)
+            btn_start_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.START)
             kbb.add(InlineKeyboardButton(text=strings.BTN_TRAINING_START, callback_data=btn_start_data.pack()))
         adjust += [1]
-        btn_students_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                       action=TrainingCD.Action.STUDENTS)
-        btn_levels_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                     action=TrainingCD.Action.LEVELS)
-        btn_edit_name_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                        action=TrainingCD.Action.EDIT_NAME)
-        btn_delete_data = TrainingCD(token=token, training_id=training_id, page_index=page_index,
-                                     action=TrainingCD.Action.DELETE)
+        btn_students_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.STUDENTS)
+        btn_levels_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.LEVELS)
+        btn_edit_name_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.EDIT_NAME)
+        btn_delete_data = TrainingCD(token=token, training_id=training_id, action=TrainingCD.Action.DELETE)
         kbb.add(InlineKeyboardButton(text=strings.BTN_STUDENTS + f" ({student_counter})",
                                      callback_data=btn_students_data.pack()))
-        kbb.add(InlineKeyboardButton(text=strings.BTN_LEVELS + f" ({level_counter})",
-                                     callback_data=btn_levels_data.pack()))
+        kbb.add(
+            InlineKeyboardButton(text=strings.BTN_LEVELS + f" ({level_counter})", callback_data=btn_levels_data.pack()))
         kbb.add(InlineKeyboardButton(text=strings.BTN_EDIT_NAME, callback_data=btn_edit_name_data.pack()))
         kbb.add(InlineKeyboardButton(text=strings.BTN_DELETE, callback_data=btn_delete_data.pack()))
         adjust += [2, 1, 1]
-    btn_back_data = TrainingCD(token=token, page_index=page_index, action=TrainingCD.Action.BACK)
+    btn_back_data = TrainingCD(token=token, action=TrainingCD.Action.BACK)
     kbb.add(InlineKeyboardButton(text=strings.BTN_BACK, callback_data=btn_back_data.pack()))
     adjust.append(1)
     kbb.adjust(*adjust)
@@ -155,12 +154,12 @@ def level_keyboard(token: str, training_id: int, level_id: Optional[int] = None,
 def training_start_keyboard(token: str, training_id: int):
     kbb = InlineKeyboardBuilder()
     adjust = []
-    btn_show_data = TrainingStartCD(token=token, training_id=training_id, action=TrainingStartCD.Action.SHOW)
-    btn_edit_text_data = TrainingStartCD(token=token, training_id=training_id, action=TrainingStartCD.Action.EDIT)
+    btn_show_data = StartLevelCD(token=token, training_id=training_id, action=StartLevelCD.Action.SHOW)
+    btn_edit_text_data = StartLevelCD(token=token, training_id=training_id, action=StartLevelCD.Action.EDIT)
     kbb.add(InlineKeyboardButton(text=strings.BTN_SHOW, callback_data=btn_show_data.pack()))
     kbb.add(InlineKeyboardButton(text=strings.BTN_EDIT, callback_data=btn_edit_text_data.pack()))
     adjust += [1, 1]
-    btn_back_data = TrainingStartCD(token=token, training_id=training_id, action=LevelCD.Action.BACK)
+    btn_back_data = StartLevelCD(token=token, training_id=training_id, action=LevelCD.Action.BACK)
     kbb.add(InlineKeyboardButton(text=strings.BTN_BACK, callback_data=btn_back_data.pack()))
     adjust.append(1)
     kbb.adjust(*adjust)
@@ -175,6 +174,8 @@ async def trainings_handler(msg: Message, state: FSMContext):
         await show_trainings(token, msg)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state, canceled=False)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_TRAININGS))
@@ -182,13 +183,12 @@ async def trainings_callback(callback: CallbackQuery, state: FSMContext):
     data = ListCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
-        await state.update_data({UPDATED_MSG: None})
         if data.action == data.Action.ADD:
             await state.set_state(TrainingCreateStates.NAME)
             await callback.message.answer(strings.CREATE_TRAINING__NAME)
-            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
+            await set_updated_msg(state, callback.message.message_id)
         elif data.action == data.Action.SELECT:
-            await show_training(data.token, data.selected_item_id, callback.message, data.page_index, is_answer=False)
+            await show_training(data.token, data.selected_item_id, callback.message, is_answer=False)
         elif data.action == data.Action.PREVIOUS_PAGE:
             await show_trainings(data.token, callback.message, page_index=data.page_index - 1, is_answer=False)
         elif data.action == data.Action.NEXT_PAGE:
@@ -198,41 +198,43 @@ async def trainings_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(TrainingCD.filter())
 async def training_callback(callback: CallbackQuery, state: FSMContext):
     data = TrainingCD.unpack(callback.data)
     try:
-        await state.update_data({UPDATED_MSG: None})
+        await service.token_validate(data.token)
         if data.action == data.Action.BACK:
-            await show_trainings(data.token, callback.message, data.page_index, is_answer=False)
+            await show_trainings(data.token, callback.message, is_answer=False)
         elif data.action == data.Action.DELETE:
             await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__DELETE.format(training_name=training.name)
-            await show_confirmation(data.token, callback.message, tag=TAG_TRAINING_DELETE, item_id=data.training_id,
-                                    args=data.page_index, is_answer=False, text=text)
+            await show_confirmation(data.token, callback.message, tag=TAG_TRAINING_DELETE,
+                                    item_id=data.training_id, is_answer=False, text=text)
         elif data.action == data.Action.EDIT_NAME:
             await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
             await state.set_state(TrainingEditNameStates.NAME)
             await callback.message.answer(strings.TRAINING__EDIT_NAME)
-            await state.update_data({UPDATED_ITEM: data.training_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
+            await set_updated_item(state, data.training_id)
+            await set_updated_msg(state, callback.message.message_id)
         elif data.action == data.Action.LEVELS:
             await show_levels(data.token, data.training_id, callback.message, is_answer=False)
         elif data.action == data.Action.START:
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__START.format(training_name=training.name)
             await show_confirmation(data.token, callback.message, data.training_id, text, tag=TAG_TRAINING_START,
-                                    is_answer=False, args=data.page_index)
+                                    is_answer=False)
         elif data.action == data.Action.STOP:
             training = await service.get_training_by_id(data.token, data.training_id)
             text = strings.TRAINING__STOP.format(training_name=training.name)
             await show_confirmation(data.token, callback.message, data.training_id, text, tag=TAG_TRAINING_STOP,
-                                    is_answer=False, args=data.page_index)
+                                    is_answer=False)
         elif data.action == data.Action.STUDENTS:
             await show_students(data.token, callback.message, data.training_id, is_answer=False)
         await callback.answer()
@@ -240,10 +242,14 @@ async def training_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
-    except NotFoundError:
-        await show_training(data.token, data.training_id, callback.message, data.page_index, is_answer=False)
+    except AccessError:
+        await access_error_for_callback(callback, state)
+    except (NotFoundError, TrainingNotFoundError):
+        await show_training(data.token, data.training_id, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_STUDENTS))
@@ -259,13 +265,19 @@ async def students_callback(callback: CallbackQuery, state: FSMContext):
             await reset_state(state)
             await callback.message.answer(strings.STUDENTS__ENTER__FULL_NAME)
             await state.set_state(StudentCreateState.FULL_NAME)
-            await state.update_data({UPDATED_ITEM: training_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id, data.page_index]})
+            await set_updated_item(state, training_id)
+            await set_updated_msg(state, callback.message.message_id)
         await callback.answer()
+    except TrainingNotFoundError:
+        await show_training(data.token, training_id, callback.message, is_answer=False)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except TrainingIsNotActiveError:
         await callback.answer(strings.TRAINING_IS_NOT_STARTED_ERROR)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.message(StudentCreateState.FULL_NAME)
@@ -273,120 +285,139 @@ async def create_student_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
         await service.token_validate(token)
-        if msg.content_type != ContentType.TEXT:
-            raise InitialsValueError()
-        state_date = await state.get_data()
-        updated_item_id = state_date.get(UPDATED_ITEM, None)
-        initials = get_initials_from_text(msg.text, has_none=True)
-        acc_data = await service.create_student(token, updated_item_id, initials[1], initials[0], initials[2])
+        valid_content_type_msg(msg, ContentType.TEXT)
+        last_name, first_name, patronymic = valid_full_name(msg.text, null_if_empty=True)
+        updated_item_id, args = await get_updated_item(state)
+        acc_data = await service.create_student(token, updated_item_id, first_name, last_name, patronymic)
         training = await service.get_training_by_id(token, updated_item_id)
         keyboard = invite_keyboard(AccountType.STUDENT, acc_data.access_key, training.name)
         text = strings.CREATE_STUDENT__SUCCESS.format(access_key=acc_data.access_key,
                                                       access_link=get_access_key_link(acc_data.access_key))
         await msg.answer(text, reply_markup=keyboard)
         await reset_state(state)
-        await asyncio.sleep(3)
-        updated_msg = state_date.get(UPDATED_MSG, None)
-        if updated_msg:
-            await show_students(token, msg, updated_item_id, edited_msg_id=updated_msg[0], page_index=updated_msg[1],
-                                is_answer=True)
-    except InitialsValueError:
-        await msg.answer(strings.CREATE_ACCOUNT__ERROR_FORMAT)
+        await asyncio.sleep(0.5)
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_students(token, msg, updated_item_id, edited_msg_id=updated_msg_id, is_answer=True)
+    except ValueNotValidError as e:
+        await msg.answer(strings.error_value(error_msg=e.error_msg))
     except TrainingIsNotActiveError:
         await msg.answer(strings.TRAINING_IS_NOT_STARTED_ERROR)
         await reset_state(state)
-    except NotFoundError:
+    except AccessError:
+        await access_error(msg, state)
+    except (NotFoundError, TrainingNotFoundError):
         await msg.answer(strings.TRAINING__NOT_FOUND)
         await reset_state(state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_START))
 async def start_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
-    page_index = int(data.args)
     try:
+        await service.token_validate(data.token)
         if data.is_agree:
             await service.start_training(data.token, data.item_id)
-            await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+            await show_training(data.token, data.item_id, callback.messag, is_answer=False)
             await callback.answer(strings.TRAINING__STARTED)
         else:
-            await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+            await show_training(data.token, data.item_id, callback.message, is_answer=False)
             await callback.answer()
     except TrainingIsEmptyError:
         await callback.answer(strings.TRAINING__STARTED__ERROR__TRAINING_IS_EMPTY)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except NotFoundError:
-        await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+        await show_training(data.token, data.item_id, callback.message, is_answer=False)
     except TrainingAlreadyHasThisStateError:
         await callback.answer(strings.TRAINING__STARTED__ERROR__ALREADY_STARTED)
-        await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+        await show_training(data.token, data.item_id, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_STOP))
 async def stop_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
-    page_index = int(data.args)
     try:
+        await service.token_validate(data.token)
         if data.is_agree:
             await service.stop_training(data.token, data.item_id)
-            await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+            await show_training(data.token, data.item_id, callback.message, is_answer=False)
             await callback.answer(strings.TRAINING__STOPPED)
         else:
-            await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+            await show_training(data.token, data.item_id, callback.message, is_answer=False)
             await callback.answer()
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except NotFoundError:
-        await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+        await show_training(data.token, data.item_id, callback.message, is_answer=False)
+        await callback.answer()
     except TrainingAlreadyHasThisStateError:
         await callback.answer(strings.TRAINING__STARTED__ERROR__NOT_STARTED)
-        await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+        await show_training(data.token, data.item_id, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_TRAINING_DELETE))
 async def delete_training_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
-    page_index = int(data.args)
     try:
+        await service.token_validate(data.token)
         if data.is_agree:
             await service.delete_training(data.token, data.item_id)
-            await show_trainings(data.token, callback.message, page_index, is_answer=False)
+            await show_trainings(data.token, callback.message, is_answer=False)
             await callback.answer(strings.TRAINING__DELETED)
         else:
-            await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+            await show_training(data.token, data.item_id, callback.message, is_answer=False)
             await callback.answer()
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except TrainingHasStudentsError:
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
     except NotFoundError:
-        await show_training(data.token, data.item_id, callback.message, page_index, is_answer=False)
+        await show_training(data.token, data.item_id, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.message(TrainingCreateStates.NAME, F.content_type == ContentType.TEXT)
 async def create_training_name_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:
-        await service.create_training(token, msg.text)
+        await service.token_validate(token)
+        valid_content_type_msg(msg, ContentType.TEXT)
+        name = valid_name(msg.text)
+        await service.create_training(token, name)
         await msg.answer(strings.CREATE_TRAINING__CREATED)
         await reset_state(state)
-        state_data = await state.get_data()
-        updated_msg: Optional[Any] = state_data.get(UPDATED_MSG, None)
-        if updated_msg:
-            await show_trainings(token, msg, page_index=updated_msg[1], edited_msg_id=updated_msg[0])
-    except ValueError:
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_trainings(token, msg, edited_msg_id=updated_msg_id)
+    except ValueNotValidError as e:
+        await msg.answer(strings.error_value(e.error_msg))
+    except NotChooseRoleError:
         await state.set_state(TrainingCreateStates.ROLE)
-        await state.update_data({"new_training_name": msg.text})
+        name = valid_name(msg.text)
+        await state.update_data({NEW_TRAINING_NAME: name})
         await show_choose_role(token, msg)
-    except EmptyFieldError:
-        pass
+    except AccessError:
+        await access_error(msg, state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_CHOOSE_ROLE))
@@ -398,40 +429,47 @@ async def create_training_role_callback(callback: CallbackQuery, state: FSMConte
         await callback.answer(strings.ACTION_CANCELED)
         return
     try:
+        await service.token_validate(data.token)
         state_data = await state.get_data()
-        name = state_data.get("new_training_name")
+        name = state_data.get(NEW_TRAINING_NAME)
         await service.create_training(data.token, name, role_id=data.selected_item_id)
         role = await service.get_role_by_id(data.token, data.selected_item_id)
         await callback.message.edit_text(strings.CREATE_TRAINING__ROLE__SELECTED.format(role_name=role.name))
         await callback.message.answer(strings.CREATE_TRAINING__CREATED)
         await reset_state(state)
-        state_data = await state.get_data()
-        updated_msg: Optional[Any] = state_data.get(UPDATED_MSG, None)
-        if updated_msg:
-            await show_trainings(data.token, callback.message, page_index=updated_msg[1], edited_msg_id=updated_msg[0])
+        updated_msg_id, updated_msg_arg = await get_updated_msg(state)
+        await show_trainings(data.token, callback.message, edited_msg_id=updated_msg_id)
         await callback.answer()
+    except AccessError:
+        await access_error(callback.message, state)
+        await callback.message.edit_reply_markup(reply_markup=None)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error(callback.message, state)
+        await callback.message.edit_reply_markup(reply_markup=None)
 
 
 @router.message(TrainingEditNameStates.NAME)
 async def edit_name_training_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
-    if msg.content_type != ContentType.TEXT:
-        await msg.answer(strings.TRAINING__EDIT_NAME__ERROR__INCORRECT_FORMAT)
-        return
     try:
-        state_data = await state.get_data()
-        employee_id = state_data.get(UPDATED_ITEM)
-        update_msg = state_data.get(UPDATED_MSG)
-        await service.update_name_training(token, employee_id, name=msg.text)
+        await service.token_validate(token)
+        valid_content_type_msg(msg, ContentType.TEXT)
+        name = valid_name(msg.text)
+        employee_id, args = get_updated_item(state)
+        await service.update_name_training(token, employee_id, name=name)
         await msg.answer(strings.TRAINING__EDIT_NAME__SUCCESS)
-        if update_msg:
-            await show_training(token, employee_id, msg, update_msg[1], update_msg[0])
         await reset_state(state)
+        update_msg_id, update_msg_args = get_updated_msg(state)
+        await show_training(token, employee_id, msg, edited_msg_id=update_msg_id)
+    except ValueNotValidError as e:
+        await msg.answer(strings.error_value(e.error_msg))
     except TrainingHasStudentsError:
         await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
+    except AccessError:
+        await access_error(msg, state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
@@ -440,6 +478,8 @@ async def edit_name_training_handler(msg: Message, state: FSMContext):
         await reset_state(state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.callback_query(ListCD.filter(F.tag == TAG_LEVELS))
@@ -453,11 +493,10 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.ADD:
             await service.check_training_is_not_active(data.token, training_id)
             await service.check_training_has_not_students(data.token, training_id)
-            await reset_state(state)
             await callback.message.answer(strings.ENTER__LEVEL__TITLE)
             await state.set_state(LevelCreateStates.TITLE)
-            await state.update_data({UPDATED_ITEM: training_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id]})
+            await set_updated_item(state, training_id)
+            await set_updated_msg(state, callback.message.message_id)
         elif data.action == data.Action.SELECT and data.selected_item_id != -1:
             await show_about_level(data.token, callback.message, training_id, data.selected_item_id, is_answer=False)
         elif data.action == data.Action.SELECT and data.selected_item_id == -1:
@@ -467,8 +506,14 @@ async def levels_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
+    except TrainingNotFoundError:
+        await show_training(data.token, training_id, callback.message, is_answer=False)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(LevelCD.filter())
@@ -476,51 +521,56 @@ async def level_callback(callback: CallbackQuery, state: FSMContext):
     data = LevelCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
-        level = None
-        if data.level_id:
-            level = await service.get_level_by_id(data.token, data.level_id)
         if data.action == data.Action.BACK:
             await show_levels(data.token, data.training_id, callback.message, is_answer=False)
-        elif data.action == data.Action.NEXT_LEVEL and level.next_level_id:
-            await show_about_level(data.token, callback.message, data.training_id, level.next_level_id, is_answer=False)
-        elif data.action == data.Action.PREVIOUS_LEVEL and level.previous_level_id:
-            await show_about_level(data.token, callback.message, data.training_id, level.previous_level_id,
-                                   is_answer=False)
-        elif data.action == data.Action.DELETE:
-            await service.check_training_is_not_active(data.token, data.training_id)
+        else:
             level = await service.get_level_by_id(data.token, data.level_id)
-            text = strings.LEVEL__DELETE.format(level_name=ellipsis_text(level.title),
-                                                training_name=ellipsis_text(level.training.name))
-            await show_confirmation(data.token, callback.message, data.level_id, text, TAG_DELETE_LEVEL,
-                                    is_answer=False,
-                                    args=data.training_id)
-        elif data.action == data.Action.COUNTER:
-            await show_level(data.token, callback.message, data.level_id)
-        elif data.action == data.Action.EDIT:
-            await service.check_training_is_not_active(data.token, data.training_id)
-            await service.check_training_has_not_students(data.token, data.training_id)
-            await reset_state(state)
-            await callback.message.answer(strings.ENTER__LEVEL_CONTENT)
-            await state.set_state(LevelEditStates.CONTENT)
-            await state.update_data({UPDATED_ITEM: data.level_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id]})
-        elif data.action == data.Action.EDIT_TITLE:
-            await service.check_training_is_not_active(data.token, data.training_id)
-            await service.check_training_has_not_students(data.token, data.training_id)
-            await reset_state(state)
-            await callback.message.answer(strings.ENTER__LEVEL__TITLE)
-            await state.set_state(LevelEditStates.TITLE)
-            await state.update_data({UPDATED_ITEM: data.level_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id]})
+            if data.action == data.Action.NEXT_LEVEL and level.next_level_id:
+                await show_about_level(data.token, callback.message, data.training_id, level.next_level_id,
+                                       is_answer=False)
+            elif data.action == data.Action.PREVIOUS_LEVEL and level.previous_level_id:
+                await show_about_level(data.token, callback.message, data.training_id, level.previous_level_id,
+                                       is_answer=False)
+            elif data.action == data.Action.DELETE:
+                await service.check_training_is_not_active(data.token, data.training_id)
+                await service.check_training_has_not_students(data.token, data.training_id)
+                level = await service.get_level_by_id(data.token, data.level_id)
+                text = strings.LEVEL__DELETE.format(level_name=ellipsis_text(level.title),
+                                                    training_name=ellipsis_text(level.training.name))
+                await show_confirmation(data.token, callback.message, data.level_id, text, TAG_DELETE_LEVEL,
+                                        is_answer=False,
+                                        args=data.training_id)
+            elif data.action == data.Action.COUNTER:
+                await show_level(data.token, callback.message, data.level_id)
+            elif data.action == data.Action.EDIT:
+                await service.check_training_is_not_active(data.token, data.training_id)
+                await service.check_training_has_not_students(data.token, data.training_id)
+                await callback.message.answer(strings.ENTER__LEVEL_CONTENT)
+                await state.set_state(LevelEditStates.CONTENT)
+                await set_updated_item(state, data.level_id, [data.training_id])
+                await set_updated_msg(state, callback.message.message_id)
+            elif data.action == data.Action.EDIT_TITLE:
+                await service.check_training_is_not_active(data.token, data.training_id)
+                await service.check_training_has_not_students(data.token, data.training_id)
+                await callback.message.answer(strings.ENTER__LEVEL__TITLE)
+                await state.set_state(LevelEditStates.TITLE)
+                await set_updated_item(state, data.level_id, [data.training_id])
+                await set_updated_msg(state, callback.message.message_id)
         await callback.answer()
     except TrainingHasStudentsError:
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
+    except TrainingNotFoundError:
+        await show_training(data.token, data.training_id, callback.message, is_answer=False)
     except NotFoundError:
         await show_about_level(data.token, callback.message, data.training_id, data.level_id, is_answer=False)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_DELETE_LEVEL))
@@ -541,40 +591,47 @@ async def delete_level_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except NotFoundError:
         await show_about_level(data.token, callback.message, training_id, data.level_id, is_answer=False)
+    except TrainingNotFoundError:
+        await show_training(data.token, training_id, callback.message, is_answer=False)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.message(LevelEditStates.TITLE)
 async def edit_level_title_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
-    if msg.content_type != ContentType.TEXT:
-        await msg.answer(strings.CREATE_LEVEL__TITLE__ERROR__INCORRECT_FORMAT)
-        return
     try:
         await service.token_validate(token)
-        state_data = await state.get_data()
-        level_id = state_data[UPDATED_ITEM]
-        await service.update_title_level_by_id(token, level_id, msg.text)
+        valid_content_type_msg(msg, ContentType.TEXT)
+        title = valid_name(msg.text)
+        level_id, args = await get_updated_item(state)
+        training_id = args[0]
+        await service.update_title_level_by_id(token, level_id, title)
         await msg.answer(strings.EDIT_TITLE_LEVEL__SUCCESS)
-        updated_msg = state_data[UPDATED_MSG]
-        if updated_msg:
-            level = await service.get_level_by_id(token, level_id)
-            await show_about_level(token, msg, level.training_id, level_id, edited_msg_id=updated_msg[0])
         await reset_state(state)
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_about_level(token, msg, training_id, level_id, edited_msg_id=updated_msg_id)
     except TrainingHasStudentsError:
         await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
+    except AccessError:
+        await access_error(msg, state)
     except NotFoundError:
         await msg.answer(text=strings.LEVEL__NOT_FOUND)
         await reset_state(state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.message(LevelEditStates.CONTENT)
@@ -582,38 +639,46 @@ async def edit_level_content_handler(msg: AlbumMessage, state: FSMContext):
     token = await get_token(state)
     try:
         await service.token_validate(token)
+        valid_content_type_msg(msg, CONTENT_TYPE__MEDIA_GROUP, ContentType.TEXT, ContentType.AUDIO, ContentType.VIDEO,
+                               ContentType.PHOTO, ContentType.DOCUMENT, ContentType.LOCATION, ContentType.ANIMATION,
+                               ContentType.CONTACT, ContentType.STICKER, CONTENT_TYPE__POLL__QUIZ)
         if msg.content_type == ContentType.POLL and msg.poll.type == PollType.QUIZ:
             level_type = get_level_type_from_content_type(msg.content_type, PollType.QUIZ)
         else:
             level_type = get_level_type_from_content_type(msg.content_type)
-        state_data = await state.get_data()
-        level_id = state_data[UPDATED_ITEM]
+        level_id, args = get_updated_item(state)
+        training_id = args[0]
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.update_content_level_by_id(token, level_type=level_type, level_id=level_id, messages=messages)
         await msg.answer(strings.EDIT_CONTENT_LEVEL__SUCCESS)
-        updated_msg = state_data[UPDATED_MSG]
-        if updated_msg:
-            level = await service.get_level_by_id(token, level_id)
-            await show_about_level(token, msg, level.training_id, level_id, edited_msg_id=updated_msg[0])
         await reset_state(state)
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_about_level(token, msg, training_id, level_id, edited_msg_id=updated_msg_id)
+    except ValueNotValidError as e:
+        await msg.answer(strings.error_value(e.error_msg))
     except TrainingHasStudentsError:
         await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
+    except AccessError:
+        await access_error(msg, state)
     except NotFoundError:
         await msg.answer(text=strings.LEVEL__NOT_FOUND)
         await reset_state(state)
-    except TypeError:
-        await msg.answer(strings.CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT)
+    except TrainingNotFoundError:
+        await msg.answer(text=strings.TRAINING__NOT_FOUND)
+        await reset_state(state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
-@router.callback_query(TrainingStartCD.filter())
+@router.callback_query(StartLevelCD.filter())
 async def start_level_callback(callback: CallbackQuery, state: FSMContext):
-    data = TrainingStartCD.unpack(callback.data)
+    data = StartLevelCD.unpack(callback.data)
     try:
         await service.token_validate(data.token)
         if data.action == data.Action.BACK:
@@ -623,105 +688,110 @@ async def start_level_callback(callback: CallbackQuery, state: FSMContext):
         elif data.action == data.Action.EDIT:
             await service.check_training_is_not_active(data.token, data.training_id)
             await service.check_training_has_not_students(data.token, data.training_id)
-            await reset_state(state)
             await callback.message.answer(strings.TRAINING__START__EDIT__CONTENT)
             await state.set_state(TrainingStartEditStates.CONTENT)
-            await state.update_data({UPDATED_ITEM: data.training_id})
-            await state.update_data({UPDATED_MSG: [callback.message.message_id]})
+            await set_updated_item(state, data.training_id)
+            await set_updated_msg(state, callback.message.message_id)
         await callback.answer()
     except TrainingHasStudentsError:
         await callback.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
     except TrainingIsActiveError:
         await callback.answer(strings.TRAINING_IS_STARTED_ERROR)
-    except NotFoundError:
-        await show_levels(data.token, data.training_id, callback.message, is_answer=False)
+    except TrainingNotFoundError:
+        await show_training(data.token, data.training_id, callback.message, is_answer=False)
+    except AccessError:
+        await access_error_for_callback(callback, state)
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.message(TrainingStartEditStates.CONTENT)
 async def edit_start_level_handler(msg: AlbumMessage, state: FSMContext):
     token = await get_token(state)
     try:
-        if msg.content_type not in [ContentType.PHOTO, ContentType.TEXT]:
-            raise TypeError()
         await service.token_validate(token)
-        state_data = await state.get_data()
-        training_id = state_data[UPDATED_ITEM]
+        valid_content_type_msg(msg, ContentType.TEXT, ContentType.PHOTO)
+        training_id, args = await get_updated_item(state)
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.update_start_msg_training(token, training_id=training_id, msg=messages)
         await msg.answer(strings.TRAINING__START__EDIT__CONTENT__SUCCESS)
-        updated_msg = state_data[UPDATED_MSG]
-        if updated_msg:
-            await show_about_start_level(token, msg, training_id, edited_msg_id=updated_msg[0])
         await reset_state(state)
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_about_start_level(token, msg, training_id, edited_msg_id=updated_msg_id)
+    except ValueNotValidError as e:
+        await msg.answer(strings.error_value(e.error_msg))
     except TrainingHasStudentsError:
         await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
-    except TypeError:
-        await msg.answer(strings.TRAINING__START__EDIT__CONTENT__ERROR__INCORRECT_FORMAT)
+    except TrainingNotFoundError:
+        await msg.answer(strings.TRAINING__NOT_FOUND)
+        await reset_state(state)
+    except AccessError:
+        await access_error(msg, state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
-
-
-CREATE_LEVEL_TITLE = "create_level_title"
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.message(LevelCreateStates.TITLE)
 async def create_level_title_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
-    if msg.content_type != ContentType.TEXT:
-        await msg.answer(strings.CREATE_LEVEL__TITLE__ERROR__INCORRECT_FORMAT)
-        return
     try:
         await service.token_validate(token)
-        await state.update_data({CREATE_LEVEL_TITLE: msg.text})
+        valid_content_type_msg(msg, ContentType.TEXT)
+        title = valid_name(msg.text)
+        await state.update_data({NEW_LEVEL_TITLE: title})
         await state.set_state(LevelCreateStates.CONTENT)
         await msg.answer(strings.ENTER__LEVEL_CONTENT)
-    except TrainingHasStudentsError:
-        await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
-        await reset_state(state)
-    except TrainingIsActiveError:
-        await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
-        await reset_state(state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 @router.message(LevelCreateStates.CONTENT)
 async def create_level_content_handler(msg: AlbumMessage, state: FSMContext):
     token = await get_token(state)
-
     try:
         await service.token_validate(token)
+        valid_content_type_msg(msg, CONTENT_TYPE__MEDIA_GROUP, ContentType.TEXT, ContentType.AUDIO, ContentType.VIDEO,
+                               ContentType.PHOTO, ContentType.DOCUMENT, ContentType.LOCATION, ContentType.ANIMATION,
+                               ContentType.CONTACT, ContentType.STICKER, CONTENT_TYPE__POLL__QUIZ)
         if msg.content_type == ContentType.POLL and msg.poll.type == PollType.QUIZ:
             level_type = get_level_type_from_content_type(msg.content_type, PollType.QUIZ)
         else:
             level_type = get_level_type_from_content_type(msg.content_type)
         state_data = await state.get_data()
-        title = state_data[CREATE_LEVEL_TITLE]
-        training_id = state_data[UPDATED_ITEM]
+        title = state_data[NEW_LEVEL_TITLE]
+        training_id, args = await get_updated_item(state)
         messages = msg.messages if msg.content_type == CONTENT_TYPE__MEDIA_GROUP else [msg]
         await service.create_level(token, level_type=level_type, training_id=training_id, title=title,
                                    messages=messages)
         await msg.answer(strings.CREATE_LEVEL__SUCCESS)
-        updated_msg = state_data[UPDATED_MSG]
-        if updated_msg:
-            await show_levels(token, training_id, msg, edited_msg_id=updated_msg[0])
         await reset_state(state)
+        updated_msg_id, updated_msg_args = await get_updated_msg(state)
+        await show_levels(token, training_id, msg, edited_msg_id=updated_msg_id)
     except TrainingHasStudentsError:
         await msg.answer(strings.TRAINING_HAS_STUDENTS_ERROR)
         await reset_state(state)
     except TrainingIsActiveError:
         await msg.answer(strings.TRAINING_IS_STARTED_ERROR)
         await reset_state(state)
-    except TypeError:
-        await msg.answer(strings.CREATE_LEVEL__CONTENT__ERROR__INCORRECT_FORMAT)
+    except TrainingNotFoundError:
+        await msg.answer(strings.TRAINING__NOT_FOUND)
+        await reset_state(state)
+    except AccessError:
+        await access_error(msg, state)
     except TokenNotValidError:
         await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)
 
 
 async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_msg_id: Optional[int] = None,
@@ -752,13 +822,13 @@ async def show_trainings(token: str, msg: Message, page_index: int = 0, edited_m
         await show(msg, text, is_answer, edited_msg_id, keyboard)
 
 
-async def show_training(token: str, training_id: int, msg: Message, page_index: int = 0,
-                        edited_msg_id: Optional[int] = None, is_answer: bool = True):
+async def show_training(token: str, training_id: int, msg: Message, edited_msg_id: Optional[int] = None,
+                        is_answer: bool = True):
     text = strings.TRAINING__NOT_FOUND
-    keyboard = training_keyboard(token, page_index)
+    keyboard = training_keyboard(token)
     try:
         training = await service.get_training_by_id(token, training_id)
-        keyboard = training_keyboard(token, page_index, training_id, is_started=is_started_training(training),
+        keyboard = training_keyboard(token, training_id, is_started=is_started_training(training),
                                      student_counter=len(training.students), level_counter=len(training.levels))
         text = strings.TRAINING.format(
             name=training.name,
@@ -770,17 +840,20 @@ async def show_training(token: str, training_id: int, msg: Message, page_index: 
     except NotFoundError:
         await show(msg, text, is_answer, edited_msg_id, keyboard)
     except AccessError:
+        text = strings.ERROR__ACCESS
         await show(msg, text, is_answer, edited_msg_id, keyboard)
 
 
-async def show_choose_role(token: str, msg: Message, edited_msg_id: Optional[int] = None, page_index: int = 0,
-                           is_answer: bool = True):
-    text = strings.CREATE_TRAINING__ROLE
-    all_roles = await service.get_all_roles(token)
-    list_items = [ListItem(i.name, i.id) for i in all_roles]
-    keyboard = list_keyboard(token, tag=TAG_CHOOSE_ROLE, pages=[list_items], max_btn_in_row=2, arg=page_index,
-                             add_btn_text=None)
-    await show(msg, text, is_answer, edited_msg_id, keyboard)
+async def show_choose_role(token: str, msg: Message, edited_msg_id: Optional[int] = None, is_answer: bool = True):
+    try:
+        text = strings.CREATE_TRAINING__ROLE
+        all_roles = await service.get_all_roles(token)
+        list_items = [ListItem(i.name, i.id) for i in all_roles]
+        keyboard = list_keyboard(token, tag=TAG_CHOOSE_ROLE, pages=[list_items], max_btn_in_row=2,
+                                 add_btn_text=None)
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
+    except NotFoundError:
+        raise TokenNotValidError()
 
 
 async def show_levels(token: str, training_id: int, msg: Message,
@@ -812,8 +885,8 @@ async def show_levels(token: str, training_id: int, msg: Message,
             items_str.append(item_str)
         text = strings.TRAINING__LEVELS.format(training_name=ellipsis_text(training.name), items="\n".join(items_str))
         await show(msg, text=text, is_answer=is_answer, edited_msg_id=edited_msg_id, keyboard=keyboard)
-    except NotFoundError:
-        await show_trainings(token, msg, is_answer=False)
+    except (AccessError, NotFoundError):
+        await show_training(token, training_id, msg, is_answer=is_answer)
 
 
 async def show_about_level(token: str, msg: Message, training_id: int, level_id: int,
@@ -828,7 +901,7 @@ async def show_about_level(token: str, msg: Message, training_id: int, level_id:
         if level.type == LevelType.QUIZ:
             icon_type_str = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ
             icon_type_icon = strings.TRAININGS__LEVELS__ITEM__TYPE__QUIZ_I
-        content_type = get_content_type_srt(level.messages)
+        content_type = get_content_type_str(level.messages)
         content_text = get_content_text(level.messages)
         content_text = "\n—\n" + blockquote(content_text, expand=True) if content_text else ""
         date_create = datetime.fromtimestamp(level.date_create).strftime(strings.DATE_FORMAT_FULL)
@@ -838,6 +911,9 @@ async def show_about_level(token: str, msg: Message, training_id: int, level_id:
                                     level_type_icon=icon_type_icon) + content_text
         keyboard = level_keyboard(token, training_id, level_id, level.order, len(levels))
         await show(msg, text, is_answer, edited_msg_id, keyboard)
+    except AccessError:
+        text = strings.ERROR__ACCESS
+        await show(msg, text, is_answer, edited_msg_id, keyboard)
     except NotFoundError:
         await show(msg, text, is_answer, edited_msg_id, keyboard)
 
@@ -846,18 +922,18 @@ async def show_level(token: str, msg: Message, level_id: int, edited_msg_id: Opt
     try:
         level = await service.get_level_by_id(token, level_id)
         await send_msg(msg, level.messages)
-    except ValueError as _:
-        await show(msg, text=strings.LEVEL__ERROR__VIEW, edited_msg_id=edited_msg_id, is_answer=True)
+    except AccessError:
+        await show(msg, strings.ERROR__ACCESS, edited_msg_id=edited_msg_id, is_answer=True)
     except NotFoundError:
-        await show(msg, text=strings.LEVEL__NOT_FOUND, edited_msg_id=edited_msg_id, is_answer=True)
+        await show(msg, strings.LEVEL__NOT_FOUND, edited_msg_id=edited_msg_id, is_answer=True)
 
 
 async def show_start_level(token: str, msg: Message, training_id: int, edited_msg_id: Optional[int] = None):
     try:
         training = await service.get_training_by_id(token, training_id)
         await send_msg(msg, training.message)
-    except NotFoundError:
-        await show(msg, text=strings.TRAINING__NOT_FOUND, edited_msg_id=edited_msg_id, is_answer=True)
+    except (NotFoundError, AccessError):
+        await show_training(token, training_id, msg, edited_msg_id=edited_msg_id, is_answer=False)
 
 
 async def show_about_start_level(token: str, msg: Message, training_id: int, edited_msg_id: Optional[int] = None,
@@ -870,8 +946,8 @@ async def show_about_start_level(token: str, msg: Message, training_id: int, edi
                                                     has_preview=has_preview) + content_text
         keyboard = training_start_keyboard(token, training_id)
         await show(msg, text, is_answer, edited_msg_id, keyboard=keyboard)
-    except NotFoundError:
-        await show_levels(token, training_id, msg, edited_msg_id, is_answer=False)
+    except (NotFoundError, AccessError):
+        await show_training(token, training_id, msg, edited_msg_id, is_answer=False)
 
 
 async def show_students(token: str, msg: Message, training_id: int, edited_msg_id: Optional[int] = None,
@@ -893,5 +969,5 @@ async def show_students(token: str, msg: Message, training_id: int, edited_msg_i
         if not students:
             text = strings.STUDENTS__EMPTY.format(training_name=ellipsis_text(training.name))
         await show(msg, text, is_answer, edited_msg_id, keyboard=keyboard)
-    except NotFoundError:
+    except (NotFoundError, AccessError):
         await show_training(token, training_id, msg, is_answer=False)

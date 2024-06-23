@@ -8,10 +8,11 @@ from aiogram.types import Message
 from custom_storage import TOKEN
 from data.asvttk_service.models import AccountType
 from handlers.authorization_handlers import show_warning, log_in
-from handlers.handlers_utils import reset_state, delete_msg, ADDITIONAL_SESSION_MSG_IDS, add_additional_msg_id
+from handlers.handlers_utils import reset_state, delete_msg, add_additional_msg_id, get_token, token_not_valid_error, \
+    unknown_error
 from src import strings, commands
 from data.asvttk_service import asvttk_service as service
-from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
+from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError, UnknownError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
     TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, \
     TrainingStartEditStates, LevelEditStates, StudentCreateState, MainStates
@@ -75,5 +76,12 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
 @router.message(StudentCreateState(), Command(commands.CANCEL))
 @router.message(LevelEditStates(), Command(commands.CANCEL))
 async def cancel_handler(msg: Message, state: FSMContext):
-    await reset_state(state)
-    await msg.answer(strings.ACTION_CANCELED)
+    token = await get_token(state)
+    try:
+        await service.token_validate(token)
+        await reset_state(state)
+        await msg.answer(strings.ACTION_CANCELED)
+    except TokenNotValidError:
+        await token_not_valid_error(msg, state)
+    except UnknownError:
+        await unknown_error(msg, state)

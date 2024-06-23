@@ -49,6 +49,10 @@ def __get_invalid_chars(v: Any, allows_chars: str) -> str:
     return "".join(set([i for i in v if i not in allows_chars]))
 
 
+def __show_invalid_chars(chars: str):
+    return "  ".join([code(escape(i)) for i in chars])
+
+
 @property
 def latin_symbols():
     return latin_low + latin_up
@@ -80,7 +84,7 @@ def valid_role_name(v: Optional[str]):
 
 
 @typechecked
-def valid_full_name(full_name: str, empty_value: str = "-",
+def valid_full_name(full_name: str, empty_v: str = "-",
                     null_if_empty: bool = False) -> (Optional[str], str, Optional[str]):
     __is_not_empty(full_name)
     fn_list = [i.replace(" ", "") for i in full_name.split()]
@@ -88,26 +92,37 @@ def valid_full_name(full_name: str, empty_value: str = "-",
         raise ValueNotValidError(ERROR__FULL_NAME_INTEGRITY__MORE.format(than="3"))
     if len(fn_list) < 3:
         raise ValueNotValidError(ERROR__FULL_NAME_INTEGRITY__LESS.format(than="3"))
-    if fn_list[1] == empty_value or fn_list[1] is None:
+    if fn_list[1] == empty_v or fn_list[1] is None:
         raise ValueNotValidError(ERROR__REQUIRED_FILL.format(required=f" {code('Имя')}"))
     allow_chars = russian_up + russian_low + latin_low + latin_up + "._()-'"
     s = "".join([__get_invalid_chars(fn_list[i], allow_chars) for i in range(3)])
     s = "".join(list(set(s)))
     if s:
-        raise ValueNotValidError(ERROR__INVALID_CHARS.format(chars="  ".join([code(escape(i)) for i in s])))
+        raise ValueNotValidError(ERROR__INVALID_CHARS.format(chars=__show_invalid_chars(s)))
     if null_if_empty:
-        fn_list = [None if i == empty_value else i for i in fn_list]
+        fn_list = [None if i == empty_v else i for i in fn_list]
     return fn_list[0], fn_list[1], fn_list[2]
 
 
 @typechecked
-def valid_email(v: str, empty_value: str = "-", null_if_empty: bool = False) -> Optional[str]:
+def valid_email(v: str, empty_v: str = "-", null_if_empty: bool = False) -> Optional[str]:
     __is_not_empty(v)
     res = v
-    if res == empty_value and null_if_empty:
+    if res == empty_v and null_if_empty:
         res = None
     if not validators.email(v):
         raise ValueNotValidError(ERROR__EMAIL)
+    return res
+
+
+@typechecked
+def valid_name(v: str) -> Optional[str]:
+    __is_not_empty(v)
+    res = v
+    allow_chars = russian_up + russian_low + latin_low + latin_up + special_chars + " "
+    s = __get_invalid_chars(v, allow_chars)
+    if s:
+        raise ValueNotValidError(ERROR__INVALID_CHARS.format(chars=__show_invalid_chars(s)))
     return res
 
 

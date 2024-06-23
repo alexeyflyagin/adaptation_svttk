@@ -6,15 +6,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError
+from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError, UnknownError
 from data.asvttk_service.models import AccountType
 from handlers import student_handlers
 from handlers.handlers_confirmation import ConfirmationCD, show_confirmation
 from handlers.handlers_utils import delete_msg, log_out, get_token, ADDITIONAL_SESSION_MSG_IDS, \
-    token_not_valid_error_for_callback
+    token_not_valid_error_for_callback, unknown_error_for_callback
 from handlers.last_handlers import help_handler, show_help
 from src import strings
-from src.types import CD
 from src.utils import get_access_key_link
 from data.asvttk_service import asvttk_service as service
 
@@ -49,11 +48,14 @@ async def log_in_data_callback(callback: CallbackQuery, state: FSMContext):
     data = LogInDataCD.unpack(callback.data)
     token = await get_token(state)
     try:
+        await service.token_validate(token)
         if data.action == data.Action.READ_IT:
             await show_help(token, state, callback.message, is_answer=False)
         await callback.answer()
     except TokenNotValidError:
         await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 @router.callback_query(ConfirmationCD.filter(F.tag == TAG_LOG_IN_WARNING))
@@ -61,6 +63,7 @@ async def log_in_warning_callback(callback: CallbackQuery, state: FSMContext):
     data = ConfirmationCD.unpack(callback.data)
     access_key = data.args
     try:
+        await service.token_validate(data.token)
         if data.is_agree:
             await service.check_exist_of_access_key(access_key)
             await log_in(callback.message, callback.from_user.id, state, access_key=access_key)
@@ -69,6 +72,10 @@ async def log_in_warning_callback(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(strings.LOG_IN__ACCOUNT_NOT_FOUND, reply_markup=None)
         await asyncio.sleep(2)
         await delete_msg(callback.message.bot, callback.message.chat.id, callback.message.message_id)
+    except TokenNotValidError:
+        await token_not_valid_error_for_callback(callback, state)
+    except UnknownError:
+        await unknown_error_for_callback(callback, state)
 
 
 async def show_warning(msg: Message, access_key: str, warning_text: str):

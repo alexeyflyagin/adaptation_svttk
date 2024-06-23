@@ -74,7 +74,7 @@ async def token_not_valid_error(msg: Message, state: FSMContext):
 
 
 async def token_not_valid_error_for_callback(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(inline_message_id=None)
+    await callback.message.edit_reply_markup(reply_markup=None)
     await log_out(callback.message, state, log_out_text=strings.SESSION_ERROR)
 
 

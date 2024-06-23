@@ -4,7 +4,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from data.asvttk_service import asvttk_service as service
-from data.asvttk_service.exceptions import TokenNotValidError, UnknownError
+from data.asvttk_service.exceptions import TokenNotValidError, UnknownError, NotFoundError
 from data.asvttk_service.models import AccountType
 
 from handlers.handlers_utils import get_token, add_additional_msg_id, unknown_error
@@ -39,13 +39,16 @@ async def other_handler(msg: Message):
 
 
 async def show_help(token: str, state: FSMContext, msg: Message, is_answer: bool = True):
-    await service.token_validate(token)
-    account = await service.get_account_by_id(token)
-    if account.type == AccountType.ADMIN:
-        text = strings.HELP__ADMIN
-    elif account.type == AccountType.EMPLOYEE:
-        text = strings.HELP__EMPLOYEE
-    else:
-        raise ValueError()
-    bot_msg = await show(msg, text, is_answer)
-    await add_additional_msg_id(state, bot_msg.message_id)
+    try:
+        await service.token_validate(token)
+        account = await service.get_account_by_id(token)
+        if account.type == AccountType.ADMIN:
+            text = strings.HELP__ADMIN
+        elif account.type == AccountType.EMPLOYEE:
+            text = strings.HELP__EMPLOYEE
+        else:
+            raise ValueError()
+        bot_msg = await show(msg, text, is_answer)
+        await add_additional_msg_id(state, bot_msg.message_id)
+    except NotFoundError:
+        raise TokenNotValidError()

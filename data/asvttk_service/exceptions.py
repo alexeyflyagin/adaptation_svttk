@@ -23,6 +23,10 @@ class UnknownError(Exception):
     pass
 
 
+class NotChooseRoleError(Exception):
+    pass
+
+
 class TrainingIsEmptyError(Exception):
     pass
 

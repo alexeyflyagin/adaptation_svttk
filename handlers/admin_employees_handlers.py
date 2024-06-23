@@ -276,7 +276,7 @@ async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
     try:
         await service.token_validate(token)
         valid_content_type_msg(msg, ContentType.TEXT)
-        last_name, first_name, patronymic = valid_full_name(msg.text, null_if_empty=True)
+        last_name, first_name, patronymic = valid_full_name(msg.text)
         employee_id, args = await get_updated_item(state)
         await service.update_full_name_employee(token, employee_id, first_name=first_name, last_name=last_name,
                                                 patronymic=patronymic)

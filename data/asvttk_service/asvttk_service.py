@@ -176,7 +176,7 @@ async def __check_training_has_not_students(s: AsyncSession, training_id: int):
 
 @typechecked()
 async def check_training_has_not_students(token: str, training_id: int):
-    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError, TrainingHasStudentsError
+    # e: TokenNotValidError, UnknownError, AccessError, TrainingHasStudentsError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
@@ -186,7 +186,7 @@ async def check_training_has_not_students(token: str, training_id: int):
                 raise TokenNotValidError()
             await __check_training_has_not_students(s, training_id)
             await s.commit()
-        except (TokenNotValidError, AccessError, NotFoundError, TrainingHasStudentsError) as e:
+        except (TokenNotValidError, AccessError, TrainingHasStudentsError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
@@ -868,7 +868,7 @@ async def remove_training_from_role(token: Optional[str], role_id: int, training
 @typechecked
 async def create_training(token: Optional[str], name: str, start_text: Optional[str] = None,
                           html_start_text: Optional[str] = None, role_id: Optional[int] = None) -> TrainingData:
-    # e: TokenNotValidError, UnknownError, AccessError
+    # e: TokenNotValidError, UnknownError, AccessError, NotChooseRoleError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
@@ -882,7 +882,7 @@ async def create_training(token: Optional[str], name: str, start_text: Optional[
                 if role_id is None and len(allowed_role_ids) == 1:
                     role_id = allowed_role_ids[0]
                 if role_id is None:
-                    raise ValueError("The employee must enter the role_id")
+                    raise NotChooseRoleError()
                 if role_id not in allowed_role_ids:
                     raise AccessError("The employee does not have this role")
             training_name_check(name)
@@ -900,7 +900,7 @@ async def create_training(token: Optional[str], name: str, start_text: Optional[
                 s.add(training_and_role)
             await s.commit()
             return training_data
-        except (TokenNotValidError, AccessError) as e:
+        except (TokenNotValidError, AccessError, NotChooseRoleError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
@@ -986,7 +986,8 @@ async def get_training_by_id(token: Optional[str], training_id: int) -> Training
 
 @typechecked
 async def update_start_msg_training(token: Optional[str], training_id: int, msg: list[Message]):
-    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError, TrainingIsActiveError, TrainingHasStudentsError
+    # e: TokenNotValidError, UnknownError, AccessError, TrainingNotFoundError, TrainingIsActiveError,
+    # TrainingHasStudentsError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
@@ -996,14 +997,12 @@ async def update_start_msg_training(token: Optional[str], training_id: int, msg:
                 raise TokenNotValidError()
             query = await __safe_execute(s, select(TrainingOrm).filter(TrainingOrm.id == training_id).with_for_update())
             training = query.scalars().first()
-            try:
-                await __check_training_is_not_active(s, training_id)
-                await __check_training_has_not_students(s, training_id)
-            except TrainingNotFoundError:
-                raise NotFoundError
+            await __check_training_is_not_active(s, training_id)
+            await __check_training_has_not_students(s, training_id)
             training.message = msg
             await s.commit()
-        except (TokenNotValidError, AccessError, NotFoundError, TrainingIsActiveError, TrainingHasStudentsError) as e:
+        except (TokenNotValidError, AccessError, TrainingNotFoundError, TrainingIsActiveError,
+                TrainingHasStudentsError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
@@ -1499,7 +1498,8 @@ async def get_student_progress(token: Optional[str], student_id: Optional[int] =
 @typechecked
 async def create_level_answer(token: Optional[str], level_id: int,
                               answer_option_ids: Optional[list[int]] = None) -> LevelAnswerData:
-    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError, TrainingIsNotActiveError
+    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError, TrainingIsNotActiveError,
+    # LevelAnswerAlreadyExistsError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
@@ -1541,7 +1541,8 @@ async def create_level_answer(token: Optional[str], level_id: int,
             res = level_answer_orm_to_level_answer_data(level_answer, level_data, student)
             await s.commit()
             return res
-        except (TokenNotValidError, AccessError, NotFoundError, TrainingIsNotActiveError) as e:
+        except (TokenNotValidError, AccessError, NotFoundError, TrainingIsNotActiveError,
+                LevelAnswerAlreadyExistsError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
