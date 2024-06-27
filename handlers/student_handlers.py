@@ -1,4 +1,5 @@
 import asyncio
+from src.strings import eschtml
 from typing import Optional
 
 from aiogram import Router, Bot
@@ -18,6 +19,7 @@ from handlers.handlers_utils import send_msg, token_not_valid_error_for_callback
     token_not_valid_error, reset_state, unknown_error_for_callback, unknown_error
 from src import strings, commands
 from src.states import MainStates
+
 
 router = Router()
 
@@ -47,9 +49,9 @@ def start_keyboard(token: str, level_id: int, progress_state: StudentProgressSta
                    level_type: str) -> InlineKeyboardMarkup | None:
     kbb = InlineKeyboardBuilder()
     btn_continue_data = LearningCD(token=token, level_id=level_id, level_type=level_type, action=LearningCD.Action.SHOW)
-    if progress_state == StudentProgressState.START:
+    if progress_state == StudentProgressState.CREATED:
         kbb.add(InlineKeyboardButton(text=strings.BTN_BEGIN, callback_data=btn_continue_data.pack()))
-    elif progress_state == StudentProgressState.LEVEL:
+    elif progress_state == StudentProgressState.LEARNING:
         kbb.add(InlineKeyboardButton(text=strings.BTN_CONTINUE, callback_data=btn_continue_data.pack()))
     elif progress_state == StudentProgressState.COMPLETED:
         btn_show_results_data = LearningCD(token=token, action=LearningCD.Action.SHOW_RESULTS)
@@ -64,7 +66,7 @@ def next_keyboard(token: str, level_id: int, level_type: str) -> InlineKeyboardM
     btn_answer_data = LearningCD(token=token, level_id=level_id, level_type=level_type, action=LearningCD.Action.ANSWER)
     if level_type == LevelType.INFO:
         kbb.add(InlineKeyboardButton(text=strings.BTN_ALREADY_READ, callback_data=btn_answer_data.pack()))
-    elif level_type == LevelType.QUIZ:
+    elif level_type == LevelType.CONTROL:
         kbb.add(InlineKeyboardButton(text=strings.BTN_NEXT, callback_data=btn_answer_data.pack()))
     else:
         return
@@ -167,10 +169,11 @@ async def show_start(token: str, msg: Message, state: FSMContext, has_start_leve
         if has_start_level:
             bot_msg = await send_msg(msg, progress.training.message)
             await state.update_data({START_LEARN_MSG_ID: bot_msg.message_id - 1})
-        if progress.progress_state != StudentProgressState.START:
+        if progress.progress_state != StudentProgressState.CREATED:
             await restart_handler(msg, state)
             return
-        keyboard = start_keyboard(token, progress.current_level.id, progress.progress_state, progress.current_level.type)
+        keyboard = start_keyboard(token, progress.current_level.id, progress.progress_state,
+                                  progress.current_level.type)
         await msg.answer(text=strings.TRAINING_PROGRESS__BEGIN, reply_markup=keyboard)
     except NotFoundError:
         raise TokenNotValidError()
@@ -182,18 +185,19 @@ async def show_current_level(token: str, msg: Message, state: FSMContext):
     try:
         progress = await service.get_student_progress(token)
         if progress.progress_state == StudentProgressState.COMPLETED:
-            text = strings.TRAINING_PROGRESS__COMPLETED.format(training_name=progress.training.name)
+            text = strings.TRAINING_PROGRESS__COMPLETED.format(training_name=eschtml(progress.training.name))
             await msg.answer(text, message_effect_id=CONFETTI_MSG_EFFECT_ID)
             return
         level_msg = await send_msg(msg, progress.current_level.messages)
         await service.check_training_is_active(token, progress.training.id)
-        if progress.current_level.type == LevelType.QUIZ:
+        if progress.current_level.type == LevelType.CONTROL:
             await state.update_data({CLD: [level_msg.model_dump_json(), progress.current_level.id]})
         if progress.current_level.type == LevelType.INFO:
             await show_next_keyboard(token, msg, progress)
     except TrainingIsNotActiveError:
         await msg.answer(strings.TRAINING_PROGRESS__TRAINING_IS_STOPPED)
-    except TelegramBadRequest:
+    except TelegramBadRequest as _:
+        print(_.message)
         await msg.answer(strings.TELEGRAM_IS_NOT_STABLE)
     except NotFoundError:
         raise TokenNotValidError()

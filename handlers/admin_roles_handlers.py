@@ -1,4 +1,4 @@
-from html import escape
+from src.strings import eschtml, item_id
 from typing import Optional
 
 from aiogram import Router, F
@@ -90,14 +90,14 @@ async def role_callback(callback: CallbackQuery, state: FSMContext):
         else:
             role = await service.get_role_by_id(data.token, data.role_id)
             if data.action == data.Action.DELETE:
-                text = strings.ROLE_DELETE.format(role_name=escape(role.name))
+                text = strings.ROLE_DELETE.format(role_name=eschtml(role.name))
                 await show_confirmation(data.token, callback.message, item_id=data.role_id, text=text,
                                         tag=TAG_DELETE_ROLE, is_answer=False)
             elif data.action == data.Action.RENAME:
                 await state.set_state(RoleRenameStates.RENAME)
                 await set_updated_item(state, role.id)
                 await set_updated_msg(state, callback.message.message_id)
-                await callback.message.answer(strings.RENAME_ROLE__ENTER_NAME.format(role_name=escape(role.name)))
+                await callback.message.answer(strings.RENAME_ROLE__ENTER_NAME.format(role_name=eschtml(role.name)))
             elif data.action == data.Action.TRAININGS:
                 await show_edit_trainings(data.token, data.role_id, callback.message, is_answer=False)
         await callback.answer()
@@ -119,15 +119,15 @@ async def edit_trainings_callback(callback: CallbackQuery, state: FSMContext):
     role_id = int(data.arg)
     try:
         await service.token_validate(data.token)
-        if data.action == data.Action.SELECT:
+        if data.action == data.Action.BACK:
+            await show_role(data.token, role_id, callback.message, is_answer=False)
+        elif data.action == data.Action.SELECT:
             training = await service.get_training_by_id(data.token, data.selected_item_id)
             await service.remove_training_from_role(data.token, role_id=role_id, training_id=training.id)
-            await callback.answer(strings.ROLE__TRAININGS__REMOVED.format(training_name=training.name))
+            await callback.answer(strings.ROLE__TRAININGS__REMOVED.format(training_name=ellipsis_text(training.name)))
             await show_edit_trainings(data.token, role_id, callback.message, is_answer=False)
         elif data.action == data.Action.ADD:
             await show_add_trainings(data.token, role_id, callback.message, is_answer=False)
-        elif data.action == data.Action.BACK:
-            await show_role(data.token, role_id, callback.message, is_answer=False)
         elif data.action == data.Action.NEXT_PAGE:
             await show_edit_trainings(data.token, role_id, callback.message, page_index=data.page_index + 1,
                                       is_answer=False)
@@ -186,7 +186,7 @@ async def delete_role_callback(callback: CallbackQuery, state: FSMContext):
         if data.is_agree:
             role = await service.get_role_by_id(data.token, data.item_id)
             await service.delete_role(data.token, data.item_id)
-            await callback.answer(text=strings.ROLE_DELETED.format(role_name=escape(role.name)))
+            await callback.answer(text=strings.ROLE_DELETED.format(role_name=eschtml(role.name)))
             await show_roles(data.token, callback.message, is_answer=False)
         else:
             await show_role(data.token, data.item_id, callback.message, is_answer=False)
@@ -211,7 +211,7 @@ async def create_role_name_handler(msg: Message, state: FSMContext):
         valid_content_type_msg(msg, ContentType.TEXT)
         valid_role_name(msg.text)
         role = await service.create_role(token, name=msg.text)
-        await msg.answer(strings.CREATE_ROLE__SUCCESS.format(role_name=escape(role.name)))
+        await msg.answer(strings.CREATE_ROLE__SUCCESS.format(role_name=eschtml(role.name)))
         updated_msg_id, args = await get_updated_msg(state)
         await show_roles(token, msg, edited_msg_id=updated_msg_id)
         await reset_state(state)
@@ -292,18 +292,18 @@ async def show_role(token: str, role_id: int, msg: Message = None, edited_msg_id
     text = strings.ROLE__NOT_FOUND
     try:
         role = await service.get_role_by_id(token, role_id)
-        employees_list = field(" | ".join([code(get_full_name_by_account(i)) for i in role.accounts]))
-        trainings_list = field(" | ".join([code(i.name) for i in role.trainings]))
+        employees_list = field(" | ".join([code(eschtml(get_full_name_by_account(i))) for i in role.accounts]))
+        trainings_list = field(" | ".join([code(eschtml(ellipsis_text(i.name))) for i in role.trainings]))
         date_create = get_date_str(role.date_create, DateFormat.FORMAT_DAY_MONTH_YEAR_HOUR_MINUTE)
-        text = strings.ROLE.format(role_name=escape(role.name), date_create=date_create, employees_list=employees_list,
-                                   trainings_list=trainings_list)
+        text = strings.ROLE.format(role_name=eschtml(role.name), date_create=date_create, employees_list=employees_list,
+                                   trainings_list=trainings_list, item_id=item_id(role.id))
         keyboard = role_keyboard(token, role_id=role_id)
         await show(msg, text, is_answer, edited_msg_id, keyboard)
     except AccessError:
         text = strings.ERROR__ACCESS
-        await msg.edit_text(text=text, reply_markup=keyboard)
+        await show(msg, text, keyboard=keyboard, is_answer=False)
     except NotFoundError:
-        await msg.edit_text(text=text, reply_markup=keyboard)
+        await show(msg, text, keyboard=keyboard, is_answer=False)
 
 
 async def show_edit_trainings(token: str, role_id: int, msg: Message, page_index: int = 0, is_answer: bool = True):
@@ -315,7 +315,7 @@ async def show_edit_trainings(token: str, role_id: int, msg: Message, page_index
         page_index = get_safe_page_index(page_index, len(pages))
         keyboard = list_keyboard(token, tag=TAG_ROLE_TRAININGS, pages=pages, max_btn_in_row=1,
                                  page_index=page_index, arg=role_id, back_btn_text=strings.BTN_BACK, up=True)
-        text = strings.ROLE__TRAININGS.format(role_name=escape(role.name))
+        text = strings.ROLE__TRAININGS.format(role_name=eschtml(role.name))
         await show(msg, text, is_answer, keyboard=keyboard)
     except AccessError:
         await show_role(token, role_id, msg)

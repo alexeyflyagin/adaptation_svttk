@@ -19,7 +19,7 @@ class AccountType(Enum):
 
 class LevelType:
     INFO = "info"
-    QUIZ = "quiz"
+    CONTROL = "control"
 
 
 class FileType:

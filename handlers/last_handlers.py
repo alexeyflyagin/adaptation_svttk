@@ -34,6 +34,10 @@ async def help_handler(msg: Message, state: FSMContext):
 
 
 @router.message(MainStates.STUDENT)
+@router.message(MainStates.WAIT)
+@router.message(MainStates.CLEAR_PREVIOUS_SESSION
+
+                )
 async def other_handler(msg: Message):
     await msg.delete()
 

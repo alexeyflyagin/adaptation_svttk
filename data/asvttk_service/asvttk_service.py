@@ -10,11 +10,14 @@ from sqlalchemy.orm import joinedload
 from typeguard import typechecked
 
 from data.asvttk_service.database import database
+from data.asvttk_service.datetime_utils import get_date_str, DateFormat
 from data.asvttk_service.exceptions import *
 from data.asvttk_service.mappers import *
 from data.asvttk_service.models import *
 from data.asvttk_service.types import *
 from data.asvttk_service.utils import *
+from data.asvttk_service.xlsx_generation import xlsx_engine
+from data.asvttk_service.xlsx_generation.tables import RTrainingState, RStudentState, ReportRT
 
 logger = logging.getLogger(__name__)
 
@@ -247,14 +250,27 @@ async def token_validate(token: Optional[str]):
 
 
 @typechecked
-async def log_out(token: Optional[str]):
-    # e: TokenNotValidError, UnknownError
+async def give_up_account(token: Optional[str]) -> GiveUpAccountData:
+    # e: TokenNotValidError, UnknownError, AccessError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
-            await s.delete(token_data.session)
+            if token_data.account.type != AccountType.ADMIN:
+                raise AccessError()
+            token_data.account.first_name = "ADMIN"
+            token_data.account.last_name = None
+            token_data.account.patronymic = None
+            token_data.account.email = None
+            token_data.key.access_key = await __generate_access_key(s)
+            token_data.key.is_first_log_in = True
+            query = await s.execute(select(SessionOrm).filter(SessionOrm.key_id == token_data.key.id))
+            sessions = query.scalars().all()
+            for i in sessions:
+                await s.delete(i)
+            res = GiveUpAccountData(token_data.key.access_key)
             await s.commit()
-        except TokenNotValidError as e:
+            return res
+        except (TokenNotValidError, AccessError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
@@ -268,11 +284,34 @@ async def log_out(token: Optional[str]):
 
 
 @typechecked
-async def get_log_in_data_by_token(token: Optional[str]) -> LogInData:
+async def log_out(token: Optional[str]):
+    # e: TokenNotValidError, UnknownError
+    async with database.session_factory() as s:
+        try:
+            try:
+                token_data = await __validate_by_token(s, token)
+                await s.delete(token_data.session)
+            except TokenNotValidError:
+                pass
+            await s.commit()
+        except SQLAlchemyError as e:
+            await s.rollback()
+            logger.error(f"SQLAlchemyError occurred: {str(e)}")
+            raise UnknownError()
+        except Exception as e:
+            await s.rollback()
+            logger.error(f"Exception occurred: {str(e)}")
+            raise UnknownError()
+
+
+@typechecked
+async def get_log_in_data_by_token(token: Optional[str], regenerate_access_key: bool = False) -> LogInData:
     # e: TokenNotValidError, UnknownError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
+            if regenerate_access_key:
+                token_data.key.access_key = await __generate_access_key(s)
             res = LogInData(token, token_data.key.is_first_log_in, token_data.key.access_key, token_data.account.type,
                             token_data.account.id)
             await s.commit()
@@ -540,14 +579,18 @@ async def delete_employee(token: Optional[str], employee_id: int):
 
 
 @typechecked
-async def update_email_employee(token: Optional[str], employee_id: int, email: Optional[str] = None):
+async def update_email_account(token: Optional[str], account_id: Optional[int] = None, email: Optional[str] = None):
     # e: TokenNotValidError, UnknownError, AccessError, NotFoundError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
             if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
                 raise AccessError()
-            query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.id == employee_id).with_for_update())
+            if not account_id:
+                account_id = token_data.account.id
+            if token_data.account.type == AccountType.EMPLOYEE and account_id != token_data.account.id:
+                raise AccessError()
+            query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.id == account_id).with_for_update())
             account_orm = query.scalars().first()
             if email == '-':
                 email = None
@@ -568,15 +611,15 @@ async def update_email_employee(token: Optional[str], employee_id: int, email: O
 
 
 @typechecked
-async def update_full_name_employee(token: Optional[str], employee_id: int, first_name: Optional[str] = None,
-                                    last_name: Optional[str] = None, patronymic: Optional[str] = None):
+async def update_full_name_account(token: Optional[str], account_id: int, first_name: Optional[str] = None,
+                                   last_name: Optional[str] = None, patronymic: Optional[str] = None):
     # e: TokenNotValidError, UnknownError, AccessError, NotFoundError
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
             if token_data.account.type != AccountType.ADMIN:
                 raise AccessError()
-            query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.id == employee_id).with_for_update())
+            query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.id == account_id).with_for_update())
             account_orm = query.scalars().first()
             first_name, last_name, patronymic = (None if i == '-' else i for i in (first_name, last_name, patronymic))
             initials_check(first_name, last_name, patronymic)
@@ -1287,8 +1330,8 @@ async def delete_level_by_id(token: Optional[str], level_id: int):
             raise UnknownError()
 
 
-async def __get_levels_sorted(s: AsyncSession, training_id: int):
-    # e: UnknownError, TrainingNotFoundError
+async def __get_levels_sorted(s: AsyncSession, training_id: int) -> list[LevelOrm]:
+    # e: TrainingNotFoundError
     await __safe_execute(s, select(TrainingOrm).filter(TrainingOrm.id == training_id).with_for_update(),
                          TrainingNotFoundError())
     query = await s.execute(select(LevelOrm).options(joinedload(LevelOrm.training))
@@ -1438,6 +1481,66 @@ async def get_student_by_id(token: Optional[str], student_id: int) -> StudentDat
 
 
 @typechecked
+async def get_all_student_progresses(token: Optional[str], training_id: int) -> list[StudentProgressData]:
+    # e: TokenNotValidError, UnknownError, AccessError, TrainingNotFoundError
+    async with database.session_factory() as s:
+        try:
+            token_data = await __validate_by_token(s, token)
+            if token_data.account.type == AccountType.EMPLOYEE:
+                try:
+                    await __check_access_to_update_training(s, training_id, token_data.account.id)
+                except AccountNotFoundError:
+                    raise TokenNotValidError()
+            query = await __safe_execute(s, select(TrainingOrm).filter(TrainingOrm.id == training_id).with_for_update(),
+                                         TrainingNotFoundError())
+            training = query.scalars().first()
+            query = await s.execute(select(AccountOrm).options(joinedload(AccountOrm.training))
+                                    .options(joinedload(AccountOrm.answers).joinedload(LevelAnswerOrm.level))
+                                    .filter(AccountOrm.type == AccountType.STUDENT)
+                                    .filter(AccountOrm.training_id == training_id))
+            students = query.unique().scalars().all()
+            is_access = __training_is_active(training)
+            all_levels: Any = await __get_levels_sorted(s, training_id)
+            res = []
+            for student in students:
+                level_ids_by_answers = [i.level_id for i in student.answers]
+                not_completed_levels = [i for i in all_levels if i.id not in level_ids_by_answers]
+                progress_state = StudentProgressState.COMPLETED
+                current_level = None
+                if len(not_completed_levels) == len(all_levels):
+                    progress_state = StudentProgressState.CREATED
+                    current_level = not_completed_levels[0]
+                elif not_completed_levels:
+                    progress_state = StudentProgressState.LEARNING
+                    current_level = not_completed_levels[0]
+                answers_data = [level_answer_orm_to_level_answer_data(i, None, None) for i in student.answers]
+                student_data = account_orm_to_student_data(student, None, None)
+                if current_level:
+                    current_level_data = level_orm_to_level_data(current_level, None, None, None)
+                else:
+                    current_level_data = None
+                all_level = [level_orm_to_level_data(i, None, None, None) for i in all_levels]
+                training_data = training_orm_to_training_data(student.training, None, all_level)
+                result = StudentProgressData(is_access=is_access, student=student_data, progress_state=progress_state,
+                                             current_level=current_level_data, answers=answers_data,
+                                             training=training_data)
+                res.append(result)
+            await s.commit()
+            return res
+        except (TokenNotValidError, AccessError, TrainingNotFoundError) as e:
+            await s.rollback()
+            raise e
+        except SQLAlchemyError as e:
+            await s.rollback()
+            logger.error(f"SQLAlchemyError occurred: {str(e)}")
+            raise UnknownError()
+        except Exception as e:
+            await s.rollback()
+            logger.error(f"Exception occurred: {str(e)}")
+            raise UnknownError()
+
+
+@typechecked
 async def get_student_progress(token: Optional[str], student_id: Optional[int] = None) -> StudentProgressData:
     # e: TokenNotValidError, UnknownError, AccessError, NotFoundError
     async with database.session_factory() as s:
@@ -1458,15 +1561,16 @@ async def get_student_progress(token: Optional[str], student_id: Optional[int] =
                     raise TokenNotValidError()
             is_access = __training_is_active(student.training)
             all_levels: Any = await __get_levels_sorted(s, student.training_id)
+
             level_ids_by_answers = [i.level_id for i in student.answers]
             not_completed_levels = [i for i in all_levels if i.id not in level_ids_by_answers]
             progress_state = StudentProgressState.COMPLETED
             current_level = None
             if len(not_completed_levels) == len(all_levels):
-                progress_state = StudentProgressState.START
+                progress_state = StudentProgressState.CREATED
                 current_level = not_completed_levels[0]
             elif not_completed_levels:
-                progress_state = StudentProgressState.LEVEL
+                progress_state = StudentProgressState.LEARNING
                 current_level = not_completed_levels[0]
             answers_data = [level_answer_orm_to_level_answer_data(i, None, None) for i in student.answers]
             student_data = account_orm_to_student_data(student, None, None)
@@ -1482,6 +1586,92 @@ async def get_student_progress(token: Optional[str], student_id: Optional[int] =
             return res
 
         except (TokenNotValidError, AccessError, NotFoundError) as e:
+            await s.rollback()
+            raise e
+        except SQLAlchemyError as e:
+            await s.rollback()
+            logger.error(f"SQLAlchemyError occurred: {str(e)}")
+            raise UnknownError()
+        except Exception as e:
+            await s.rollback()
+            logger.error(f"Exception occurred: {str(e)}")
+            raise UnknownError()
+
+
+def __level_type_to_r_level_type(it: str) -> RLevelType:
+    if it == LevelType.INFO:
+        return RLevelType.INFO
+    elif it == LevelType.CONTROL:
+        return RLevelType.CONTROL
+
+
+def __training_state_to_r_training_state(is_active: bool) -> RTrainingState:
+    if is_active:
+        return RTrainingState.ACTIVE
+    return RTrainingState.INACTIVE
+
+
+def __student_state_to_r_student_state(student: AccountOrm, levels: list[LevelOrm]) -> RStudentState:
+    level_ids_by_answers = [i.level_id for i in student.answers]
+    not_completed_levels = [i for i in levels if i.id not in level_ids_by_answers]
+    progress_state = RStudentState.COMPLETED
+    if len(not_completed_levels) == len(levels):
+        progress_state = RStudentState.CREATED
+    elif not_completed_levels:
+        progress_state = RStudentState.LEARNING
+    return progress_state
+
+
+# noinspection PyTypeChecker
+@typechecked
+async def get_training_report(token: Optional[str], training_id: int) -> TrainingReportData:
+    # e: TokenNotValidError, UnknownError, AccessError, TrainingNotFoundError
+    async with database.session_factory() as s:
+        try:
+            token_data = await __validate_by_token(s, token)
+            if token_data.account.type == AccountType.EMPLOYEE:
+                try:
+                    await __check_access_to_update_training(s, training_id, token_data.account.id)
+                except AccountNotFoundError:
+                    raise TokenNotValidError()
+            levels = await __get_levels_sorted(s, training_id)
+            query = await __safe_execute(s, select(TrainingOrm).filter(TrainingOrm.id == training_id)
+                                         .with_for_update(), TrainingNotFoundError())
+            training: TrainingOrm = query.scalars().first()
+            await s.execute(select(AccountOrm).filter(AccountOrm.training_id == training_id)
+                            .with_for_update(), None)
+            query = await s.execute(select(AccountOrm)
+                                    .options(joinedload(AccountOrm.answers).joinedload(LevelAnswerOrm.level))
+                                    .filter(AccountOrm.training_id == training_id))
+            students: list[AccountOrm] = query.unique().scalars().all()
+            level_answers = list(itertools.chain(*[i.answers for i in students]))
+            level_answers.sort(key=lambda x: x.date_create)
+
+            training_state = __training_state_to_r_training_state(__training_is_active(training))
+            training_rt = training_orm_to_training_rt(training, training_state)
+            levels_rt = []
+            for i in range(len(levels)):
+                level_type = __level_type_to_r_level_type(levels[i].type)
+                levels_rt.append(level_orm_to_level_rt(levels[i], i + 1, level_type))
+            students_rt = []
+            for student in students:
+                level_ids_by_answers = [i.level_id for i in student.answers]
+                progress_percent = len(level_ids_by_answers) / len(levels)
+                student_state = __student_state_to_r_student_state(student, levels)
+                students_rt.append(account_orm_to_student_rt(student, student_state, progress_percent))
+            answers_rt = []
+            for answer in level_answers:
+                answers_rt.append(level_answer_orm_to_answer_rt(answer, answer.level, training_id))
+            report_date_create = datetime.utcnow()
+            report_date_create_timestamp = int(report_date_create.timestamp())
+            report_rt = ReportRT(date_create=report_date_create)
+            await s.commit()
+            date = get_date_str(report_date_create_timestamp, DateFormat.FORMAT_FULL_2)
+            tables = [*answers_rt, *levels_rt, *students_rt, training_rt, report_rt]
+            table_types = [AnswerRT, LevelRT, StudentRT, TrainingRT, ReportRT]
+            report_file = await xlsx_engine.create_xlsx(f"Report_{training_id}_{date}", table_types, tables)
+            return TrainingReportData(report_file, report_date_create_timestamp, training_id)
+        except (TokenNotValidError, AccessError, TrainingNotFoundError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:
@@ -1523,7 +1713,7 @@ async def create_level_answer(token: Optional[str], level_id: int,
             if exist_level_answer:
                 raise LevelAnswerAlreadyExistsError()
 
-            if level.type == LevelType.QUIZ and answer_option_ids:
+            if level.type == LevelType.CONTROL and answer_option_ids:
                 msg: Message = level.messages[0]
                 is_correct = msg.poll.correct_option_id == answer_option_ids[0]
                 level_answer = LevelAnswerOrm(account_id=token_data.account.id, level_id=level_id,

@@ -8,13 +8,14 @@ from src import strings
 from src.utils import get_access_key_link
 
 
-def invite_keyboard(account_type: AccountType, access_key: str, training_name: Optional[str] = None):
+def invite_keyboard(account_type: AccountType, access_key: str):
     kbb = InlineKeyboardBuilder()
     if account_type == AccountType.EMPLOYEE:
         text = strings.EMPLOYEE_INVITE_LETTER.format(invite_link=get_access_key_link(access_key))
-    elif account_type == AccountType.STUDENT and training_name:
-        text = strings.STUDENT_INVITE_LETTER.format(invite_link=get_access_key_link(access_key),
-                                                    training_name=training_name)
+    elif account_type == AccountType.STUDENT:
+        text = strings.STUDENT_INVITE_LETTER.format(invite_link=get_access_key_link(access_key))
+    elif account_type == AccountType.ADMIN:
+        text = strings.ADMIN_INVITE_LETTER.format(invite_link=get_access_key_link(access_key))
     else:
         raise TypeError
     query = SwitchInlineQueryChosenChat(query=text, allow_user_chats=True)

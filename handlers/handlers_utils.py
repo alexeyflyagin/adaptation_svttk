@@ -1,4 +1,5 @@
 import asyncio
+from src.strings import eschtml
 from typing import Optional, Any
 
 from aiogram import Bot
@@ -138,7 +139,8 @@ async def send_msg(c_msg: Message, msgs: list[Message], disable_notification: bo
                                           explanation_entities=msg.poll.explanation_entities, is_anonymous=False,
                                           allows_multiple_answers=msg.poll.allows_multiple_answers, type=msg.poll.type,
                                           correct_option_id=msg.poll.correct_option_id, message_effect_id=msg.effect_id,
-                                          explanation=msg.poll.explanation, disable_notification=disable_notification,
+                                          explanation=eschtml(msg.poll.explanation) if msg.poll.explanation else None,
+                                          disable_notification=disable_notification,
                                           question_entities=msg.poll.question_entities)
         elif msg.content_type == ContentType.AUDIO:
             res = await c_msg.answer_audio(audio=msg.audio.file_id, caption=msg.html_text,
@@ -191,6 +193,8 @@ async def log_out(msg: Message, state: FSMContext, new_token: Optional[str] = No
         await log_out_msg.delete()
     state_data = await state.get_data()
     start_session_msg_id = state_data.get(START_SESSION_MSG_ID, None)
+    token = await get_token(state)
+    await service.log_out(token)
     await state.set_data({TOKEN: new_token, START_SESSION_MSG_ID: msg.message_id})
     if start_session_msg_id:
         wait_msg = await msg.answer(strings.WAIT_CLEAR_PREVIOUS_SESSION)
@@ -200,7 +204,7 @@ async def log_out(msg: Message, state: FSMContext, new_token: Optional[str] = No
         for i in range(0, len(all_msg_ids), 5):
             tasks = [delete_msg(msg.bot, msg.chat.id, i) for i in all_msg_ids[i: i + 6]]
             await asyncio.gather(*tasks)
-        await wait_msg.delete()
+        await delete_msg(wait_msg.bot, wait_msg.chat.id, wait_msg.message_id)
     await reset_state(state)
     if log_out_msg:
         await delete_msg(msg.bot, msg.chat.id, log_out_msg.message_id)

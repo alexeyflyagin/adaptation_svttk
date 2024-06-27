@@ -1,5 +1,4 @@
 import textwrap
-from collections import deque
 from functools import reduce
 from typing import Optional, Any
 
@@ -11,7 +10,7 @@ from aiogram_album import AlbumMessage
 
 from data.asvttk_service.exceptions import InitialsValueError
 from data.asvttk_service.models import LevelType, FileType, AccountType
-from data.asvttk_service.types import AccountData, TrainingData
+from data.asvttk_service.types import AccountData, TrainingData, StudentProgressState
 from src import strings
 
 CONTENT_TYPE__MEDIA_GROUP = "media_group"
@@ -29,7 +28,7 @@ def get_level_type_from_content_type(content_type: str, arg: Optional[Any] = Non
                         ContentType.CONTACT, ContentType.STICKER]:
         return LevelType.INFO
     elif content_type == ContentType.POLL and arg == PollType.QUIZ:
-        return LevelType.QUIZ
+        return LevelType.CONTROL
     else:
         raise TypeError()
 
@@ -112,7 +111,7 @@ def get_full_name_by_account(account: AccountData, full_patronymic: bool = False
     return s
 
 
-def ellipsis_text(it: str, max_length: int = 24, s: str = "...") -> str:
+def ellipsis_text(it: str, max_length: int = 20, s: str = "...") -> str:
     if len(it) <= max_length:
         return it
     truncated = textwrap.shorten(it, width=max_length - len(s), placeholder="")
@@ -139,6 +138,17 @@ def get_training_status(training: TrainingData):
     if is_started_training(training):
         status = strings.TRAINING_STATUS__ACTIVE
     return status
+
+
+def get_student_state_str(status: StudentProgressState) -> str:
+    if status == StudentProgressState.CREATED:
+        return strings.STUDENT_STATUS__CREATED
+    elif status == StudentProgressState.LEARNING:
+        return strings.STUDENT_STATUS__LEARNING
+    elif status == StudentProgressState.COMPLETED:
+        return strings.STUDENT_STATUS__COMPLETED
+    else:
+        raise ValueError()
 
 
 async def show(msg: Message, text: str, is_answer: bool, edited_msg_id=None, keyboard=None,

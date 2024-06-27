@@ -12,6 +12,7 @@ moscow_tz = pytz.timezone('Europe/Moscow')
 
 class DateFormat(str, Enum):
     FORMAT_FULL = "%d.%m.%Y, %H:%M:%S"
+    FORMAT_FULL_2 = "%d.%m.%Y_%H-%M-%S"
     FORMAT_SHORT_DATE = "%d.%m.%Y"
     FORMAT_SHORT_TIME = "%H:%M"
     FORMAT_SHORT_TIME_SECOND = "%H:%M:%S"

@@ -5,11 +5,12 @@ from typing import Optional
 from aiogram.types import Message
 
 from data.asvttk_service.models import AccountType
+from data.asvttk_service.xlsx_generation.types import ReportFile
 
 
 class StudentProgressState(Enum):
-    START = 0
-    LEVEL = 1
+    CREATED = 0
+    LEARNING = 1
     COMPLETED = 2
 
 
@@ -24,7 +25,14 @@ class LogInData:
 
 @dataclasses.dataclass
 class GiveUpAccountData:
-    new_access_key: str
+    invite_access_key: str
+
+
+@dataclasses.dataclass
+class TrainingReportData:
+    report_file: ReportFile
+    date_create: int
+    training_id: int
 
 
 @dataclasses.dataclass

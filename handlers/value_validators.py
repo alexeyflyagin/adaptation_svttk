@@ -1,4 +1,4 @@
-from html import escape
+from src.strings import eschtml
 from typing import Optional, Any
 
 import validators
@@ -7,7 +7,7 @@ from aiogram.types import Message
 from aiogram_album import AlbumMessage
 from typeguard import typechecked
 
-from src.strings import code
+from src.strings import code, italic
 from src.utils import CONTENT_TYPE__POLL__QUIZ, get_content_type_str
 
 
@@ -29,6 +29,7 @@ ERROR__EMPTY_VALUE = "Значение не может быть пустым."
 ERROR__EMPTY_VALUE__ARG = "Значение {arg} не может быть пустым."
 ERROR__CONTENT_TYPE = """Контент некорректен. Доступные типы контента: 
 {allows_content_types}."""
+ERROR__ONLY_ONE_MSG = """Контент должен содержать только одно сообщение."""
 ERROR__MAX_LIMIT = """Значение не должно превышать {limit_value}."""
 ERROR__INVALID_CHARS = """Недопустимые символы:  {chars}"""
 ERROR__EMAIL = """Некорректный email."""
@@ -50,7 +51,7 @@ def __get_invalid_chars(v: Any, allows_chars: str) -> str:
 
 
 def __show_invalid_chars(chars: str):
-    return "  ".join([code(escape(i)) for i in chars])
+    return "  ".join([code(eschtml(i)) for i in chars])
 
 
 @property
@@ -72,8 +73,14 @@ def valid_content_type_msg(v: Message | AlbumMessage, *args):
     if not allow_types:
         raise ValueError("The field allow_types is empty!")
     if content_type not in list(args):
-        allow_types_str = [code(get_content_type_str(i)) for i in allow_types]
+        allow_types_str = [italic(get_content_type_str(i)) for i in allow_types]
         raise ValueNotValidError(ERROR__CONTENT_TYPE.format(allows_content_types=", ".join(allow_types_str)))
+
+
+@typechecked
+def valid_one_msg(v: int):
+    if v != 1:
+        raise ValueNotValidError(ERROR__ONLY_ONE_MSG)
 
 
 @typechecked
@@ -119,11 +126,8 @@ def valid_email(v: str, empty_v: str = "-", null_if_empty: bool = False) -> Opti
 def valid_name(v: str) -> Optional[str]:
     __is_not_empty(v)
     res = v
-    allow_chars = russian_up + russian_low + latin_low + latin_up + special_chars + " "
+    allow_chars = russian_up + russian_low + latin_low + latin_up + special_chars + digits + " "
     s = __get_invalid_chars(v, allow_chars)
     if s:
         raise ValueNotValidError(ERROR__INVALID_CHARS.format(chars=__show_invalid_chars(s)))
     return res
-
-
-

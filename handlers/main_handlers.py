@@ -7,7 +7,7 @@ from aiogram.types import Message
 
 from custom_storage import TOKEN
 from data.asvttk_service.models import AccountType
-from handlers.authorization_handlers import show_warning, log_in
+from handlers.authorization_handlers import show_log_out_warning, log_in
 from handlers.handlers_utils import reset_state, delete_msg, add_additional_msg_id, get_token, token_not_valid_error, \
     unknown_error
 from src import strings, commands
@@ -15,7 +15,7 @@ from data.asvttk_service import asvttk_service as service
 from data.asvttk_service.exceptions import KeyNotFoundError, TokenNotValidError, UnknownError
 from src.states import RoleCreateStates, RoleRenameStates, EmployeeCreateStates, EmployeeEditEmailStates, \
     TrainingCreateStates, EmployeeEditFullNameStates, TrainingEditNameStates, LevelCreateStates, \
-    TrainingStartEditStates, LevelEditStates, StudentCreateState, MainStates
+    TrainingStartEditStates, LevelEditStates, StudentCreateState, MainStates, MyAccountEditStates
 
 router = Router()
 
@@ -44,10 +44,10 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
             account = await service.get_account_by_token(token)
             await delete_msg(msg.bot, msg.chat.id, msg.message_id)
             if account.type == AccountType.STUDENT:
-                await show_warning(msg, access_key, strings.LOG_IN__WARNING__STUDENT)
+                await show_log_out_warning(token, msg, strings.LOG_IN__WARNING__STUDENT, access_key)
                 return
             else:
-                await show_warning(msg, access_key, strings.LOG_IN__WARNING)
+                await show_log_out_warning(token, msg, strings.LOG_OUT__WARNING, access_key)
                 return
         except TokenNotValidError:
             pass
@@ -75,6 +75,7 @@ async def start_handler(msg: Message, state: FSMContext, command: CommandObject)
 @router.message(TrainingStartEditStates(), Command(commands.CANCEL))
 @router.message(StudentCreateState(), Command(commands.CANCEL))
 @router.message(LevelEditStates(), Command(commands.CANCEL))
+@router.message(MyAccountEditStates(), Command(commands.CANCEL))
 async def cancel_handler(msg: Message, state: FSMContext):
     token = await get_token(state)
     try:

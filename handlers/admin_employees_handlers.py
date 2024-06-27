@@ -1,5 +1,5 @@
 import asyncio
-from html import escape
+from src.strings import eschtml, item_id
 from typing import Optional
 
 from aiogram import Router, F
@@ -140,20 +140,20 @@ async def employee_callback(callback: CallbackQuery, state: FSMContext):
             await show_employees(data.token, callback.message, is_answer=False)
         if data.action == data.Action.EDIT_EMAIL:
             await state.set_state(EmployeeEditEmailStates.EDIT_EMAIL)
-            await callback.message.answer(strings.EMPLOYEE__EDIT_EMAIL)
+            await callback.message.answer(strings.EDIT_EMAIL)
             await set_updated_item(state, data.employee_id)
             await set_updated_msg(state, callback.message.message_id)
         elif data.action == data.Action.DELETE:
             employee = await service.get_employee_by_id(data.token, data.employee_id)
-            text = strings.EMPLOYEE_DELETE.format(full_name=escape(get_full_name_by_account(employee,
-                                                                                            full_patronymic=True)))
+            text = strings.EMPLOYEE_DELETE.format(full_name=eschtml(get_full_name_by_account(employee,
+                                                                                             full_patronymic=True)))
             await show_confirmation(data.token, callback.message, item_id=data.employee_id,
                                     text=text, tag=TAG_DELETE_EMPLOYEE, is_answer=False)
         elif data.action == data.Action.ROLES:
             await show_edit_roles(data.token, data.employee_id, callback.message, is_answer=False)
         elif data.action == data.Action.EDIT_FN:
             await state.set_state(EmployeeEditFullNameStates.EDIT_FULL_NAME)
-            await callback.message.answer(strings.EMPLOYEE__EDIT_FULL_NAME)
+            await callback.message.answer(strings.EDIT_FULL_NAME)
             await set_updated_item(state, data.employee_id)
             await set_updated_msg(state, callback.message.message_id)
         await callback.answer()
@@ -252,8 +252,8 @@ async def edit_email_employee_handler(msg: Message, state: FSMContext):
         valid_content_type_msg(msg, ContentType.TEXT)
         email = valid_email(msg.text)
         employee_id, args = await get_updated_item(state)
-        await service.update_email_employee(token, employee_id, email=email)
-        await msg.answer(strings.EMPLOYEE__EDIT_EMAIL__SUCCESS)
+        await service.update_email_account(token, employee_id, email=email)
+        await msg.answer(strings.EDIT_EMAIL__SUCCESS)
         msg_id, args = await get_updated_msg(state)
         await show_employee(token, employee_id, msg, edited_msg_id=msg_id)
         await reset_state(state)
@@ -278,9 +278,9 @@ async def edit_full_name_employee_handler(msg: Message, state: FSMContext):
         valid_content_type_msg(msg, ContentType.TEXT)
         last_name, first_name, patronymic = valid_full_name(msg.text)
         employee_id, args = await get_updated_item(state)
-        await service.update_full_name_employee(token, employee_id, first_name=first_name, last_name=last_name,
-                                                patronymic=patronymic)
-        await msg.answer(strings.EMPLOYEE__FULL_NAME__SUCCESS)
+        await service.update_full_name_account(token, employee_id, first_name=first_name, last_name=last_name,
+                                               patronymic=patronymic)
+        await msg.answer(strings.EDIT_FULL_NAME__SUCCESS)
         msg_id, args = await get_updated_msg(state)
         await show_employee(token, employee_id, msg, edited_msg_id=msg_id)
         await reset_state(state)
@@ -311,10 +311,10 @@ async def show_employees(token: str, msg: Message, page_index: int = 0, edited_m
             items = []
             for item in page_items:
                 full_name = get_full_name_by_account(item.obj)
-                roles = ", ".join([escape(i.name) for i in item.obj.roles])
+                roles = ", ".join([eschtml(i.name) for i in item.obj.roles])
                 if not roles:
                     roles = strings.EMPLOYEES_ITEM__ROLES_EMPTY
-                items.append(strings.EMPLOYEES_ITEM.format(index=item.name, full_name=escape(full_name), roles=roles))
+                items.append(strings.EMPLOYEES_ITEM.format(index=item.name, full_name=eschtml(full_name), roles=roles))
             text = strings.EMPLOYEES.format(items="\n\n".join(items))
         await show(msg, text, is_answer, edited_msg_id, keyboard)
     except AccessError:
@@ -329,11 +329,12 @@ async def show_employee(token: str, employee_id: int, msg: Message, edited_msg_i
     try:
         employee = await service.get_employee_by_id(token, employee_id)
         keyboard = employee_keyboard(token, employee_id)
-        roles_list = " | ".join([code(escape(i.name)) for i in employee.roles])
+        roles_list = " | ".join([code(eschtml(i.name)) for i in employee.roles])
         text = strings.EMPLOYEE.format(
+            item_id=item_id(employee.id),
             date_create=get_date_str(employee.date_create, time_format=DateFormat.FORMAT_DAY_MONTH_YEAR_HOUR_MINUTE),
-            last_name=escape(field(employee.last_name)), first_name=escape(field(employee.first_name)),
-            patronymic=escape(field(employee.patronymic)), email=escape(field(employee.email)),
+            last_name=eschtml(field(employee.last_name)), first_name=eschtml(field(employee.first_name)),
+            patronymic=eschtml(field(employee.patronymic)), email=eschtml(field(employee.email)),
             roles_list=roles_list if roles_list else strings.EMPLOYEES_ITEM__ROLES_EMPTY,
         )
         await show(msg, text, is_answer, edited_msg_id, keyboard)
@@ -353,7 +354,7 @@ async def show_edit_roles(token: str, employee_id: int, msg: Message, page_index
         keyboard = list_keyboard(token, tag=TAG_EMPLOYEE_ROLES, pages=[list_items], max_btn_in_row=2,
                                  arg=employee_id, arg1=page_index, back_btn_text=strings.BTN_BACK)
         text = strings.EMPLOYEE__ROLES.format(
-            full_name=escape(get_full_name_by_account(employee, full_patronymic=True)))
+            full_name=eschtml(get_full_name_by_account(employee, full_patronymic=True)))
         await show(msg, text, is_answer, keyboard=keyboard)
     except AccessError:
         await show_employee(token, employee_id, msg, is_answer=False)

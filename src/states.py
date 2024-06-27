@@ -54,3 +54,8 @@ class TrainingCreateStates(StatesGroup):
 
 class TrainingEditNameStates(StatesGroup):
     NAME = State()
+
+
+class MyAccountEditStates(StatesGroup):
+    EMAIL = State()
+    FULL_NAME = State()
