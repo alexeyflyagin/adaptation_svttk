@@ -541,7 +541,7 @@ CREATE_STUDENT__SUCCESS = f"""Аккаунт для ученика готов!
 Пригласите пользователя, нажав '<code>Пригласить</code>'."""
 
 
-STUDENT_INVITE_LETTER = f"""Приглашаю вас пройти курс '{{training_name}}'.
+STUDENT_INVITE_LETTER = f"""Приглашаю вас пройти курс.
 Вы можете пройти его, пройдя по ссылке: {{invite_link}}."""
 
 

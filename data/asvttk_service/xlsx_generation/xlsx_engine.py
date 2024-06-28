@@ -1,5 +1,6 @@
 import asyncio
 import os
+import platform
 from concurrent.futures import ThreadPoolExecutor
 
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -44,7 +45,7 @@ def __create_xlsx(file_name: str, table_types: list[type[ReportTable]], tables: 
             if style:
                 row[i].style = style
 
-    filename = rf'data\asvttk_service\xlsx_generation\generated\{file_name}.xlsx'
+    filename = os.path.join('data', 'asvttk_service', 'xlsx_generation', 'generated', f'{file_name}.xlsx')
     wb.save(filename)
     return filename
 
@@ -59,5 +60,5 @@ async def __run_sync_code_in_thread(*args):
 @typechecked
 async def create_xlsx(file_name: str, table_types: list[type[ReportTable]], tables: list[ReportTable]) -> ReportFile:
     filename = await __run_sync_code_in_thread(file_name, table_types, tables)
-    path = os.path.abspath(filename).removesuffix(rf"\{filename}")
-    return ReportFile(path, filename)
+    path = os.path.dirname(filename)
+    return ReportFile(path, os.path.basename(filename))

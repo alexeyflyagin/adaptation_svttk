@@ -14,7 +14,7 @@ class ReportFile:
 
     @property
     def __absolute_path__(self):
-        return rf'{self.path}\{self.filename}'
+        return os.path.join(self.path, self.filename)
 
     def delete(self):
         os.remove(self.__absolute_path__)

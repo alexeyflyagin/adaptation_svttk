@@ -1,5 +1,3 @@
-from typing import Optional
-
 from aiogram.types import SwitchInlineQueryChosenChat, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
