@@ -156,7 +156,7 @@ async def give_up_callback(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             await log_out(callback.message, state)
             invite_link = get_access_key_link(give_up_data.invite_access_key)
-            text = strings.EMPLOYEE_INVITE_LETTER.format(invite_link=invite_link)
+            text = strings.ADMIN_INVITE_LETTER.format(invite_link=invite_link)
             keyboard = invite_keyboard(AccountType.ADMIN, give_up_data.invite_access_key)
             await show(callback.message, text, is_answer=True, keyboard=keyboard)
         else:
@@ -210,9 +210,9 @@ async def edit_my_full_name_handler(msg: Message, state: FSMContext):
         except NotFoundError:
             raise TokenNotValidError()
         await msg.answer(strings.EDIT_FULL_NAME__SUCCESS)
+        await reset_state(state)
         msg_id, args = await get_updated_msg(state)
         await show_my_account(token, msg, edited_msg_id=msg_id)
-        await reset_state(state)
     except ValueNotValidError as e:
         await msg.answer(strings.error_value(e.error_msg))
     except AccessError:

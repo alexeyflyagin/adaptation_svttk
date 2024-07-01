@@ -579,6 +579,36 @@ async def delete_employee(token: Optional[str], employee_id: int):
 
 
 @typechecked
+async def delete_student(token: Optional[str], student_id: int):
+    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError
+    async with database.session_factory() as s:
+        try:
+            token_data = await __validate_by_token(s, token)
+            if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
+                raise AccessError()
+            query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.type == AccountType.STUDENT)
+                                         .filter(AccountOrm.id == student_id))
+            student: AccountOrm = query.scalars().first()
+            try:
+                await __check_access_to_get_training(s, student.training_id, token_data.account.id)
+            except AccountNotFoundError:
+                raise TokenNotValidError()
+            await s.delete(student)
+            await s.commit()
+        except (TokenNotValidError, AccessError, NotFoundError) as e:
+            await s.rollback()
+            raise e
+        except SQLAlchemyError as e:
+            await s.rollback()
+            logger.error(f"SQLAlchemyError occurred: {str(e)}")
+            raise UnknownError()
+        except Exception as e:
+            await s.rollback()
+            logger.error(f"Exception occurred: {str(e)}")
+            raise UnknownError()
+
+
+@typechecked
 async def update_email_account(token: Optional[str], account_id: Optional[int] = None, email: Optional[str] = None):
     # e: TokenNotValidError, UnknownError, AccessError, NotFoundError
     async with database.session_factory() as s:
@@ -617,10 +647,17 @@ async def update_full_name_account(token: Optional[str], account_id: int, first_
     async with database.session_factory() as s:
         try:
             token_data = await __validate_by_token(s, token)
-            if token_data.account.type != AccountType.ADMIN:
+            if token_data.account.type not in [AccountType.ADMIN, AccountType.EMPLOYEE]:
                 raise AccessError()
             query = await __safe_execute(s, select(AccountOrm).filter(AccountOrm.id == account_id).with_for_update())
-            account_orm = query.scalars().first()
+            account_orm: AccountOrm = query.scalars().first()
+            if token_data.account.type == AccountType.EMPLOYEE and account_orm.type != AccountType.STUDENT:
+                raise AccessError()
+            if token_data.account.type == AccountType.EMPLOYEE and account_orm.type == AccountType.STUDENT:
+                try:
+                    await __check_access_to_get_training(s, account_orm.training_id, token_data.account.id)
+                except AccountNotFoundError:
+                    raise TokenNotValidError()
             first_name, last_name, patronymic = (None if i == '-' else i for i in (first_name, last_name, patronymic))
             initials_check(first_name, last_name, patronymic)
             account_orm.first_name = first_name
@@ -1176,6 +1213,38 @@ async def stop_training(token: Optional[str], training_id: int):
             training.date_end = get_current_time()
             await s.commit()
         except (TokenNotValidError, AccessError, NotFoundError, TrainingAlreadyHasThisStateError) as e:
+            await s.rollback()
+            raise e
+        except SQLAlchemyError as e:
+            await s.rollback()
+            logger.error(f"SQLAlchemyError occurred: {str(e)}")
+            raise UnknownError()
+        except Exception as e:
+            await s.rollback()
+            logger.error(f"Exception occurred: {str(e)}")
+            raise UnknownError()
+
+
+@typechecked
+async def clear_training(token: Optional[str], training_id: int):
+    # e: TokenNotValidError, UnknownError, AccessError, NotFoundError, TrainingIsActiveError
+    async with database.session_factory() as s:
+        try:
+            token_data = await __validate_by_token(s, token)
+            try:
+                await __check_access_to_update_training(s, training_id, token_data.account.id)
+            except AccountNotFoundError:
+                raise TokenNotValidError()
+            await __safe_execute(s, select(TrainingOrm).filter(TrainingOrm.id == training_id).with_for_update())
+            query = await __safe_execute(s, select(TrainingOrm).options(joinedload(TrainingOrm.students))
+                                         .options(joinedload(TrainingOrm.levels)).filter(TrainingOrm.id == training_id))
+            training = query.unique().scalars().first()
+            await __check_training_is_not_active(s, training_id)
+            training.date_start, training.date_end = None, None
+            for student in training.students:
+                await s.delete(student)
+            await s.commit()
+        except (TokenNotValidError, AccessError, NotFoundError, TrainingIsActiveError) as e:
             await s.rollback()
             raise e
         except SQLAlchemyError as e:

@@ -26,6 +26,10 @@ class StudentCreateState(StatesGroup):
     FULL_NAME = State()
 
 
+class StudentEditState(StatesGroup):
+    FULL_NAME = State()
+
+
 class TrainingStartEditStates(StatesGroup):
     CONTENT = State()
 
